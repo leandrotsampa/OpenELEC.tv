@@ -39,6 +39,11 @@ case "$LINUX" in
     PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
     PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET imx6-status-led imx6-soc-fan"
     ;;
+  hisilicon)
+    PKG_VERSION="hisilicon-3.10-b4e1b4a"
+#    PKG_URL="https://github.com/Spitzbube/hisilicon-kernel/archive/$PKG_NAME-$PKG_VERSION.tar.gz"
+    PKG_URL="https://github.com/Spitzbube/hisilicon-kernel/releases/download/$PKG_NAME-$PKG_VERSION/$PKG_NAME-$PKG_VERSION.tar.xz"
+    ;;
   *)
     PKG_VERSION="4.1.12"
     PKG_URL="http://www.kernel.org/pub/linux/kernel/v4.x/$PKG_NAME-$PKG_VERSION.tar.xz"
