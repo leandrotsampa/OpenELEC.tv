@@ -1,0 +1,202 @@
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp
+--- kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	1970-01-01 01:00:00.000000000 +0100
++++ kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	2016-02-22 09:51:08.092485738 +0100
+@@ -0,0 +1,130 @@
++
++#include "EGLNativeTypeHisilicon.h"
++#include <EGL/egl.h>
++#include "utils/log.h"
++
++
++CEGLNativeTypeHisilicon::CEGLNativeTypeHisilicon()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CEGLNativeTypeHisilicon");
++}
++
++CEGLNativeTypeHisilicon::~CEGLNativeTypeHisilicon()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::~CEGLNativeTypeHisilicon");
++}
++
++bool CEGLNativeTypeHisilicon::CheckCompatibility()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CheckCompatibility");
++  return true;
++}
++
++void CEGLNativeTypeHisilicon::Initialize()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::Initialize");
++  return;
++}
++
++void CEGLNativeTypeHisilicon::Destroy()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::Destroy");
++  return;
++}
++
++bool CEGLNativeTypeHisilicon::CreateNativeDisplay()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CreateNativeDisplay");
++
++  m_nativeDisplay = EGL_DEFAULT_DISPLAY;
++
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::CreateNativeWindow()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CreateNativeWindow");
++
++  fbdev_window *nativeWindow = new fbdev_window;
++  if (!nativeWindow)
++  {
++    return false;
++  }
++  nativeWindow->width = 1280;
++  nativeWindow->height = 720;
++  m_nativeWindow = nativeWindow;
++
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::GetNativeDisplay(XBNativeDisplayType **nativeDisplay) const
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::GetNativeDisplay");
++
++  if (!nativeDisplay)
++  {
++    return false;
++  }
++  *nativeDisplay = (XBNativeDisplayType*) &m_nativeDisplay;
++
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::GetNativeWindow(XBNativeWindowType **nativeWindow) const
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::GetNativeWindow");
++
++  if (!nativeWindow)
++  {
++    return false;
++  }
++  *nativeWindow = (XBNativeWindowType*) &m_nativeWindow;
++
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::DestroyNativeDisplay()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::DestroyNativeDisplay");
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::DestroyNativeWindow()
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::DestroyNativeWindow");
++
++  delete (fbdev_window*)m_nativeWindow, m_nativeWindow = NULL;
++
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::GetNativeResolution(RESOLUTION_INFO *res) const
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::GetNativeResolution");
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::SetNativeResolution(const RESOLUTION_INFO &res)
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::SetNativeResolution");
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::ProbeResolutions(std::vector<RESOLUTION_INFO> &resolutions)
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::ProbeResolutions");
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::GetPreferredResolution(RESOLUTION_INFO *res) const
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::GetPreferredResolution");
++  return true;
++}
++
++bool CEGLNativeTypeHisilicon::ShowWindow(bool show)
++{
++  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::ShowWindow");
++  return true;
++}
++
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.h
+--- kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	1970-01-01 01:00:00.000000000 +0100
++++ kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	2016-02-20 10:04:15.024372807 +0100
+@@ -0,0 +1,30 @@
++#pragma once
++
++#include "EGLNativeType.h"
++
++class CEGLNativeTypeHisilicon : public CEGLNativeType
++{
++public:
++  CEGLNativeTypeHisilicon();
++  virtual ~CEGLNativeTypeHisilicon();
++  virtual std::string GetNativeName() const { return "Hisilicon"; }
++  virtual bool  CheckCompatibility();
++  virtual void  Initialize();
++  virtual void  Destroy();
++  virtual int   GetQuirks() { return EGL_QUIRK_NONE; }
++
++  virtual bool  CreateNativeDisplay();
++  virtual bool  CreateNativeWindow();
++  virtual bool  GetNativeDisplay(XBNativeDisplayType **nativeDisplay) const;
++  virtual bool  GetNativeWindow(XBNativeWindowType **nativeWindow) const;
++
++  virtual bool  DestroyNativeWindow();
++  virtual bool  DestroyNativeDisplay();
++
++  virtual bool  GetNativeResolution(RESOLUTION_INFO *res) const;
++  virtual bool  SetNativeResolution(const RESOLUTION_INFO &res);
++  virtual bool  ProbeResolutions(std::vector<RESOLUTION_INFO> &resolutions);
++  virtual bool  GetPreferredResolution(RESOLUTION_INFO *res) const;
++
++  virtual bool  ShowWindow(bool show);
++};
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp kodi.orig/xbmc/windowing/egl/EGLWrapper.cpp
+--- kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp	2015-10-23 23:53:23.000000000 +0200
++++ kodi.orig/xbmc/windowing/egl/EGLWrapper.cpp	2016-02-20 09:58:25.796366074 +0100
+@@ -36,6 +36,9 @@
+ #if defined(HAS_IMXVPU)
+   #include "EGLNativeTypeIMX.h"
+ #endif
++#if 1
++  #include "EGLNativeTypeHisilicon.h"
++#endif
+ #include "EGLNativeTypeAmlogic.h"
+ #include "EGLWrapper.h"
+ 
+@@ -105,6 +108,9 @@
+ #if defined(HAS_IMXVPU)
+       (nativeGuess = CreateEGLNativeType<CEGLNativeTypeIMX>(implementation)) ||
+ #endif
++#if 1
++      (nativeGuess = CreateEGLNativeType<CEGLNativeTypeHisilicon>(implementation)) ||
++#endif
+       (nativeGuess = CreateEGLNativeType<CEGLNativeTypeAmlogic>(implementation))
+       )
+   {
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/Makefile.in kodi.orig/xbmc/windowing/egl/Makefile.in
+--- kodi-15.2-02e7013/xbmc/windowing/egl/Makefile.in	2015-10-23 23:53:23.000000000 +0200
++++ kodi.orig/xbmc/windowing/egl/Makefile.in	2016-02-20 10:22:05.236393438 +0100
+@@ -13,6 +13,7 @@
+ ifeq (@USE_IMXVPU@,1)
+ SRCS+= EGLNativeTypeIMX.cpp
+ endif
++SRCS+= EGLNativeTypeHisilicon.cpp
+ SRCS+= EGLWrapper.cpp
+ 
+ # Wayland specific detail
