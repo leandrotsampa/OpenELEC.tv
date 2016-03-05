@@ -1,0 +1,14 @@
+diff -Naur kodi-15.2-02e7013/configure.ac kodi.work/configure.ac
+--- kodi-15.2-02e7013/configure.ac	2016-03-05 10:50:11.246065428 +0100
++++ kodi.work/configure.ac	2016-03-05 10:49:10.834062714 +0100
+@@ -1952,6 +1952,9 @@
+         CFLAGS="$CFLAGS -DEGL_API_FB"
+       fi
+       ;;
++    *hisilicon*)
++      AC_CHECK_LIB([hi_sample_common], main, LIBS="$LIBS -lhi_msp -ljpeg6b -lhi_common", AC_MSG_ERROR($missing_library))
++      ;;
+     *)
+   esac
+ done
+

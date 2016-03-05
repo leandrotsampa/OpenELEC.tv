@@ -1,44 +1,615 @@
-diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp
 --- kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	1970-01-01 01:00:00.000000000 +0100
-+++ kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	2016-02-22 09:51:08.092485738 +0100
-@@ -0,0 +1,130 @@
++++ kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	2016-03-04 22:03:09.847767810 +0100
+@@ -0,0 +1,766 @@
 +
 +#include "EGLNativeTypeHisilicon.h"
 +#include <EGL/egl.h>
++#include <sys/ioctl.h>
 +#include "utils/log.h"
++#include "utils/StringUtils.h"
++#include "utils/SysfsUtils.h"
++#include "threads/Event.h"
++#include "guilib/gui3d.h"
 +
++#include "hifb.h"
++
++//#define USE_HI_ADP
++
++#ifdef USE_HI_ADP
++extern "C" {
++#include "hi_adp_mpi.h"
++}
++#else
++#include "hi_unf_vo.h"
++
++//TODO: Move to BoardConfig
++#define HI_DAC_YPBPR_Y	0
++#define HI_DAC_YPBPR_PB 1
++#define HI_DAC_YPBPR_PR 3
++#define HI_DAC_CVBS		2
++//#define HI_HDCP_SUPPORT
++
++class CEGLNativeTypeHisilicon::HIADP_Disp
++{
++public:
++	bool Initialize(HI_UNF_ENC_FMT_E enFormat);
++	void Destroy();
++};
++
++class CEGLNativeTypeHisilicon::HIADP_HDMI
++{
++public:
++	HIADP_HDMI(HI_UNF_HDMI_ID_E enHDMIId)
++		: m_enHDMIId(enHDMIId)
++    {
++		g_enDefaultMode = HI_UNF_HDMI_DEFAULT_ACTION_HDMI;
++    }
++
++	bool Initialize();
++	void Destroy();
++	HI_UNF_ENC_FMT_E GetNativeFormat();
++	bool ProbeResolutions(std::vector<RESOLUTION_INFO> &resolutions);
++	bool GetNativeResolution(RESOLUTION_INFO *res);
++
++private:
++	HIADP_HDMI();
++	static HI_VOID HandleEvent(HI_UNF_HDMI_EVENT_TYPE_E event, HI_VOID *pPrivateData);
++	static void HotPlug(HIADP_HDMI *pPrivateData);
++	static void UnPlug(HIADP_HDMI *pPrivateData);
++	bool FormatToResolution(HI_UNF_ENC_FMT_E fmt, RESOLUTION_INFO *res);
++
++	HI_UNF_HDMI_CALLBACK_FUNC_S  m_stCallbackFunc;
++	HI_UNF_HDMI_ID_E             m_enHDMIId;
++	HI_UNF_HDMI_DEFAULT_ACTION_E g_enDefaultMode;
++	CEvent						 m_sinkEvent;
++};
++
++bool CEGLNativeTypeHisilicon::HIADP_Disp::Initialize(HI_UNF_ENC_FMT_E enFormat)
++{
++  HI_S32                      Ret;
++  HI_UNF_DISP_INTF_S          stIntf[2];
++  HI_UNF_DISP_BG_COLOR_S      BgColor;
++  HI_UNF_DISP_OFFSET_S        offset;
++
++  Ret = HI_UNF_DISP_Init();
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_Init failed, Ret=%#x.\n", Ret);
++	  return false;
++  }
++
++  /* set display1 interface */
++  stIntf[0].enIntfType                = HI_UNF_DISP_INTF_TYPE_YPBPR;
++  stIntf[0].unIntf.stYPbPr.u8DacY     = HI_DAC_YPBPR_Y;
++  stIntf[0].unIntf.stYPbPr.u8DacPb    = HI_DAC_YPBPR_PB;
++  stIntf[0].unIntf.stYPbPr.u8DacPr    = HI_DAC_YPBPR_PR;
++  stIntf[1].enIntfType                = HI_UNF_DISP_INTF_TYPE_HDMI;
++  stIntf[1].unIntf.enHdmi             = HI_UNF_HDMI_ID_0;
++  Ret = HI_UNF_DISP_AttachIntf(HI_UNF_DISPLAY1, &stIntf[0], 2);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_AttachIntf failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  /* set display0 interface */
++  stIntf[0].enIntfType            = HI_UNF_DISP_INTF_TYPE_CVBS;
++  stIntf[0].unIntf.stCVBS.u8Dac   = HI_DAC_CVBS;
++  Ret = HI_UNF_DISP_AttachIntf(HI_UNF_DISPLAY0, &stIntf[0], 1);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_AttachIntf failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  Ret = HI_UNF_DISP_Attach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_Attach failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  /* set display1 format*/
++  Ret = HI_UNF_DISP_SetFormat(HI_UNF_DISPLAY1, enFormat);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_SetFormat failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++  if ((HI_UNF_ENC_FMT_1080P_60 == enFormat)
++	  ||(HI_UNF_ENC_FMT_1080i_60 == enFormat)
++	  ||(HI_UNF_ENC_FMT_720P_60 == enFormat)
++	  ||(HI_UNF_ENC_FMT_480P_60 == enFormat)
++	  ||(HI_UNF_ENC_FMT_NTSC == enFormat)
++	  ||(HI_UNF_ENC_FMT_3840X2160_30 == enFormat)
++	  ||(HI_UNF_ENC_FMT_3840X2160_24 == enFormat))
++  {
++	  Ret = HI_UNF_DISP_SetFormat(HI_UNF_DISPLAY0, HI_UNF_ENC_FMT_NTSC);
++	  if (HI_SUCCESS != Ret)
++	  {
++		  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_SetFormat failed, Ret=%#x.\n", Ret);
++		  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++		  HI_UNF_DISP_DeInit();
++		  return false;
++	  }
++  }
++
++  if ((HI_UNF_ENC_FMT_1080P_50 == enFormat)
++	  ||(HI_UNF_ENC_FMT_1080i_50 == enFormat)
++	  ||(HI_UNF_ENC_FMT_720P_50 == enFormat)
++	  ||(HI_UNF_ENC_FMT_576P_50 == enFormat)
++	  ||(HI_UNF_ENC_FMT_PAL == enFormat)
++	  ||(HI_UNF_ENC_FMT_3840X2160_25 == enFormat))
++  {
++	  Ret = HI_UNF_DISP_SetFormat(HI_UNF_DISPLAY0, HI_UNF_ENC_FMT_PAL);
++	  if (HI_SUCCESS != Ret)
++	  {
++		  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_SetFormat failed, Ret=%#x.\n", Ret);
++		  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++		  HI_UNF_DISP_DeInit();
++		  return false;
++	  }
++  }
++
++  Ret = HI_UNF_DISP_SetVirtualScreen(HI_UNF_DISPLAY1, 1920, 1080); //1280, 720);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_SetVirtualScreen failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  offset.u32Left      = 0;
++  offset.u32Top       = 0;
++  offset.u32Right     = 0;
++  offset.u32Bottom    = 0;
++  /*set display1 screen offset*/
++  Ret = HI_UNF_DISP_SetScreenOffset(HI_UNF_DISPLAY1, &offset);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_SetBgColor failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  /*set display0 screen offset*/
++  Ret = HI_UNF_DISP_SetScreenOffset(HI_UNF_DISPLAY0, &offset);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_SetBgColor failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  BgColor.u8Red   = 0;
++  BgColor.u8Green = 0;
++  BgColor.u8Blue  = 0;
++  Ret = HI_UNF_DISP_SetBgColor(HI_UNF_DISPLAY1, &BgColor);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_SetBgColor failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  Ret = HI_UNF_DISP_Open(HI_UNF_DISPLAY1);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_Open DISPLAY1 failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  Ret = HI_UNF_DISP_Open(HI_UNF_DISPLAY0);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "HIADP_Disp::Initialize: HI_UNF_DISP_Open DISPLAY0 failed, Ret=%#x.\n", Ret);
++	  HI_UNF_DISP_Close(HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++	  HI_UNF_DISP_DeInit();
++	  return false;
++  }
++
++  return true;
++}
++
++void CEGLNativeTypeHisilicon::HIADP_Disp::Destroy()
++{
++  HI_UNF_DISP_Close(HI_UNF_DISPLAY0);
++  HI_UNF_DISP_Close(HI_UNF_DISPLAY1);
++  HI_UNF_DISP_Detach(HI_UNF_DISPLAY0, HI_UNF_DISPLAY1);
++  HI_UNF_DISP_DeInit();
++}
++
++bool CEGLNativeTypeHisilicon::HIADP_HDMI::Initialize()
++{
++    HI_S32 Ret = HI_FAILURE;
++    HI_UNF_HDMI_OPEN_PARA_S stOpenParam;
++    HI_UNF_HDMI_DELAY_S  stDelay;
++
++    Ret = HI_UNF_HDMI_Init();
++    if (HI_SUCCESS != Ret)
++    {
++    	CLog::Log(LOGERROR, "HIADP_HDMI::Initialize: HI_UNF_HDMI_Init failed:%#x\n",Ret);
++        return false;
++    }
++#ifdef HI_HDCP_SUPPORT
++	Ret = HIADP_HDMI_SetHDCPKey(m_enHDMIId);
++	if (HI_SUCCESS != Ret)
++    {
++		CLog::Log(LOGERROR, "HIADP_HDMI::Initialize: Set hdcp erro:%#x\n",Ret);
++		//return false;
++    }
++#endif
++
++    HI_UNF_HDMI_GetDelay(m_enHDMIId, &stDelay);
++    stDelay.bForceFmtDelay = HI_TRUE;
++    stDelay.bForceMuteDelay = HI_TRUE;
++    stDelay.u32FmtDelay = 500;
++    stDelay.u32MuteDelay = 120;
++    HI_UNF_HDMI_SetDelay(m_enHDMIId, &stDelay);
++
++	m_stCallbackFunc.pfnHdmiEventCallback = HandleEvent;
++	m_stCallbackFunc.pPrivateData = this;
++
++	m_sinkEvent.Reset();
++
++	Ret = HI_UNF_HDMI_RegCallbackFunc(m_enHDMIId, &m_stCallbackFunc);
++	if (Ret != HI_SUCCESS)
++    {
++		CLog::Log(LOGERROR, "HIADP_HDMI::Initialize: hdmi reg failed:%#x\n",Ret);
++        HI_UNF_HDMI_DeInit();
++        return false;
++    }
++
++	stOpenParam.enDefaultMode = g_enDefaultMode;
++    Ret = HI_UNF_HDMI_Open(m_enHDMIId, &stOpenParam);
++    if (Ret != HI_SUCCESS)
++    {
++    	CLog::Log(LOGERROR, "HIADP_HDMI::Initialize: HI_UNF_HDMI_Open failed:%#x\n",Ret);
++        HI_UNF_HDMI_DeInit();
++        return false;
++    }
++
++	CLog::Log(LOGERROR, "HIADP_HDMI::Initialize: Waiting for Sink...\n");
++    m_sinkEvent.WaitMSec(1000);
++
++  return true;
++}
++
++HI_VOID CEGLNativeTypeHisilicon::HIADP_HDMI::HandleEvent(HI_UNF_HDMI_EVENT_TYPE_E event, HI_VOID *pPrivateData)
++{
++    switch ( event )
++    {
++        case HI_UNF_HDMI_EVENT_HOTPLUG:
++            HotPlug((CEGLNativeTypeHisilicon::HIADP_HDMI*) pPrivateData);
++            break;
++        case HI_UNF_HDMI_EVENT_NO_PLUG:
++            UnPlug((CEGLNativeTypeHisilicon::HIADP_HDMI*) pPrivateData);
++            break;
++        case HI_UNF_HDMI_EVENT_EDID_FAIL:
++    		CLog::Log(LOGERROR, "HIADP_HDMI::HandleEvent: HI_UNF_HDMI_EVENT_EDID_FAIL\n");
++            break;
++        case HI_UNF_HDMI_EVENT_HDCP_FAIL:
++    		CLog::Log(LOGERROR, "HIADP_HDMI::HandleEvent: HI_UNF_HDMI_EVENT_HDCP_FAIL\n");
++            break;
++        case HI_UNF_HDMI_EVENT_HDCP_SUCCESS:
++    		CLog::Log(LOGERROR, "HIADP_HDMI::HandleEvent: HI_UNF_HDMI_EVENT_HDCP_SUCCESS\n");
++            break;
++        case HI_UNF_HDMI_EVENT_RSEN_CONNECT:
++    		CLog::Log(LOGERROR, "HIADP_HDMI::HandleEvent: HI_UNF_HDMI_EVENT_RSEN_CONNECT\n");
++            break;
++        case HI_UNF_HDMI_EVENT_RSEN_DISCONNECT:
++    		CLog::Log(LOGERROR, "HIADP_HDMI::HandleEvent: HI_UNF_HDMI_EVENT_RSEN_DISCONNECT\n");
++            break;
++        default:
++            break;
++    }
++}
++
++void CEGLNativeTypeHisilicon::HIADP_HDMI::HotPlug(HIADP_HDMI *pPrivateData)
++{
++    HI_UNF_HDMI_ID_E       hHdmi   =  pPrivateData->m_enHDMIId;
++    HI_S32          ret = HI_SUCCESS;
++    HI_UNF_HDMI_STATUS_S           stHdmiStatus;
++    HI_UNF_HDMI_ATTR_S             stHdmiAttr;
++    HI_UNF_EDID_BASE_INFO_S        stSinkCap;
++#ifdef HI_HDCP_SUPPORT
++    static HI_U8 u8FirstTimeSetting = HI_TRUE;
++#endif
++
++    printf("\n --- Get HDMI event: HOTPLUG. --- \n");
++	CLog::Log(LOGERROR, "HIADP_HDMI::HotPlug");
++
++    HI_UNF_HDMI_GetStatus(hHdmi, &stHdmiStatus);
++    if (HI_FALSE == stHdmiStatus.bConnected)
++    {
++    	CLog::Log(LOGERROR, "HIADP_HDMI::HotPlug: No Connect\n");
++        return;
++    }
++
++    HI_UNF_HDMI_GetAttr(hHdmi, &stHdmiAttr);
++    ret = HI_UNF_HDMI_GetSinkCapability(hHdmi, &stSinkCap);
++    if(ret == HI_SUCCESS)
++    {
++        //stHdmiAttr.enVidOutMode = HI_UNF_HDMI_VIDEO_MODE_YCBCR444;
++        if(HI_TRUE == stSinkCap.bSupportHdmi)
++        {
++            stHdmiAttr.bEnableHdmi = HI_TRUE;
++            if(HI_TRUE != stSinkCap.stColorSpace.bYCbCr444)
++            {
++                stHdmiAttr.enVidOutMode = HI_UNF_HDMI_VIDEO_MODE_RGB444;
++            }
++        }
++        else
++        {
++            stHdmiAttr.enVidOutMode = HI_UNF_HDMI_VIDEO_MODE_RGB444;
++            //¶ÁÈ¡µ½ÁËedid£¬²¢ÇÒ²»Ö§³ÖhdmiÔò½øÈëdviÄ£Ê½
++            //read real edid ok && sink not support hdmi,then we run in dvi mode
++            stHdmiAttr.bEnableHdmi = HI_FALSE;
++        }
++    }
++    else
++    {
++        //when get capability fail,use default mode
++        if(pPrivateData->g_enDefaultMode != HI_UNF_HDMI_DEFAULT_ACTION_DVI)
++            stHdmiAttr.bEnableHdmi = HI_TRUE;
++        else
++            stHdmiAttr.bEnableHdmi = HI_FALSE;
++    }
++
++    if(HI_TRUE == stHdmiAttr.bEnableHdmi)
++    {
++        stHdmiAttr.bEnableAudio = HI_TRUE;
++        stHdmiAttr.bEnableVideo = HI_TRUE;
++        stHdmiAttr.bEnableAudInfoFrame = HI_TRUE;
++        stHdmiAttr.bEnableAviInfoFrame = HI_TRUE;
++    }
++    else
++    {
++        stHdmiAttr.bEnableAudio = HI_FALSE;
++        stHdmiAttr.bEnableVideo = HI_TRUE;
++        stHdmiAttr.bEnableAudInfoFrame = HI_FALSE;
++        stHdmiAttr.bEnableAviInfoFrame = HI_FALSE;
++        stHdmiAttr.enVidOutMode = HI_UNF_HDMI_VIDEO_MODE_RGB444;
++    }
++
++#ifdef HI_HDCP_SUPPORT
++    if (u8FirstTimeSetting == HI_TRUE)
++    {
++        u8FirstTimeSetting = HI_FALSE;
++        if (g_HDCPFlag == HI_TRUE)
++        {
++            stHdmiAttr.bHDCPEnable = HI_TRUE;//Enable HDCP
++        }
++        else
++        {
++            stHdmiAttr.bHDCPEnable= HI_FALSE;
++        }
++    }
++    else
++    {
++        //HDCP Enable use default setting!!
++    }
++#endif
++
++    ret = HI_UNF_HDMI_SetAttr(hHdmi, &stHdmiAttr);
++
++    /* HI_UNF_HDMI_SetAttr must before HI_UNF_HDMI_Start! */
++    ret = HI_UNF_HDMI_Start(hHdmi);
++    if (ret == HI_SUCCESS)
++    {
++    	CLog::Log(LOGERROR, "HIADP_HDMI::HotPlug: Sink available\n");
++    	pPrivateData->m_sinkEvent.Set();
++    }
++}
++
++void CEGLNativeTypeHisilicon::HIADP_HDMI::UnPlug(HIADP_HDMI *pPrivateData)
++{
++    HI_UNF_HDMI_ID_E       hHdmi   =  pPrivateData->m_enHDMIId;
++
++    printf("\n --- Get HDMI event: UnPlug. --- \n");
++	CLog::Log(LOGERROR, "HIADP_HDMI::UnPlug");
++
++    HI_UNF_HDMI_Stop(hHdmi);
++}
++
++void CEGLNativeTypeHisilicon::HIADP_HDMI::Destroy()
++{
++    HI_UNF_HDMI_Stop(m_enHDMIId);
++    HI_UNF_HDMI_Close(m_enHDMIId);
++	HI_UNF_HDMI_UnRegCallbackFunc(m_enHDMIId, &m_stCallbackFunc);
++    HI_UNF_HDMI_DeInit();
++}
++
++bool CEGLNativeTypeHisilicon::HIADP_HDMI::FormatToResolution(HI_UNF_ENC_FMT_E fmt, RESOLUTION_INFO *res)
++{
++	int w, h, r, i = 0;
++	std::string mode;
++
++	switch (fmt)
++	{
++	case HI_UNF_ENC_FMT_1080P_60:
++		w = 1920; h = 1080; r = 60;
++		mode = "HI_UNF_ENC_FMT_1080P_60";
++		break;
++	case HI_UNF_ENC_FMT_1080P_50:
++		w = 1920; h = 1080; r = 50;
++		mode = "HI_UNF_ENC_FMT_1080P_50";
++		break;
++	case HI_UNF_ENC_FMT_1080P_30:
++		w = 1920; h = 1080; r = 30;
++		mode = "HI_UNF_ENC_FMT_1080P_30";
++		break;
++	case HI_UNF_ENC_FMT_1080P_25:
++		w = 1920; h = 1080; r = 25;
++		mode = "HI_UNF_ENC_FMT_1080P_25";
++		break;
++	case HI_UNF_ENC_FMT_1080P_24:
++		w = 1920; h = 1080; r = 24;
++		mode = "HI_UNF_ENC_FMT_1080P_24";
++		break;
++	case HI_UNF_ENC_FMT_1080i_60:
++		w = 1920; h = 1080; r = 60; i = 1;
++		mode = "HI_UNF_ENC_FMT_1080i_60";
++		break;
++	case HI_UNF_ENC_FMT_1080i_50:
++		w = 1920; h = 1080; r = 50; i = 1;
++		mode = "HI_UNF_ENC_FMT_1080i_50";
++		break;
++	case HI_UNF_ENC_FMT_720P_60:
++		w = 1280; h = 720;  r = 60;
++		mode = "HI_UNF_ENC_FMT_720P_60";
++		break;
++	case HI_UNF_ENC_FMT_720P_50:
++		w = 1280; h = 720;  r = 50;
++		mode = "HI_UNF_ENC_FMT_720P_50";
++		break;
++	case HI_UNF_ENC_FMT_576P_50:
++		w = 720;  h = 576;  r = 50;
++		mode = "HI_UNF_ENC_FMT_576P_50";
++		break;
++	case HI_UNF_ENC_FMT_PAL:
++		w = 720;  h = 576;  r = 50;
++		mode = "HI_UNF_ENC_FMT_PAL";
++		break;
++	case HI_UNF_ENC_FMT_480P_60:
++		w = 720;  h = 480;  r = 60;
++		mode = "HI_UNF_ENC_FMT_480P_60";
++		break;
++	case HI_UNF_ENC_FMT_NTSC:
++		w = 720;  h = 480;  r = 60;
++		mode = "HI_UNF_ENC_FMT_NTSC";
++		break;
++	default:
++		return false;
++		break;
++	}
++
++	res->iWidth = w;
++	res->iHeight= h;
++	res->iScreenWidth = w;
++	res->iScreenHeight= h;
++	res->fRefreshRate = r;
++	res->dwFlags = (i == 0) ? D3DPRESENTFLAG_PROGRESSIVE : D3DPRESENTFLAG_INTERLACED;
++
++	res->iScreen       = 0;
++	res->bFullScreen   = true;
++	res->iSubtitles    = (int)(0.965 * res->iHeight);
++
++	res->fPixelRatio   = 1.0f;
++	res->strMode       = StringUtils::Format("%dx%d @ %.2f%s - Full Screen", res->iScreenWidth, res->iScreenHeight, res->fRefreshRate,
++										   res->dwFlags & D3DPRESENTFLAG_INTERLACED ? "i" : "");
++	res->strId         = mode;
++
++	CLog::Log(LOGERROR, "HIADP_HDMI::FormatToResolution: fmt=%d(%s)", fmt, res->strId.c_str());
++
++	return true;
++}
++
++bool CEGLNativeTypeHisilicon::HIADP_HDMI::ProbeResolutions(std::vector<RESOLUTION_INFO> &resolutions)
++{
++    HI_UNF_EDID_BASE_INFO_S stSinkCap;
++
++	resolutions.clear();
++
++    if (HI_SUCCESS == HI_UNF_HDMI_GetSinkCapability(m_enHDMIId, &stSinkCap))
++    {
++    	/*HI_UNF_ENC_FMT_E*/int fmt;
++    	for (fmt = 0/*HI_UNF_ENC_FMT_1080P_60*/; fmt < HI_UNF_ENC_FMT_BUTT; fmt++)
++    	{
++    		if (stSinkCap.bSupportFormat[fmt] == HI_TRUE)
++    		{
++    			RESOLUTION_INFO res;
++    			if (FormatToResolution((HI_UNF_ENC_FMT_E) fmt, &res))
++    				resolutions.push_back(res);
++    		}
++    	}
++    }
++
++	return resolutions.size() > 0;
++}
++
++HI_UNF_ENC_FMT_E CEGLNativeTypeHisilicon::HIADP_HDMI::GetNativeFormat()
++{
++	HI_UNF_ENC_FMT_E fmt = HI_UNF_ENC_FMT_720P_50; //Fallback for No Sink
++    HI_UNF_EDID_BASE_INFO_S stSinkCap;
++
++    if (HI_SUCCESS == HI_UNF_HDMI_GetSinkCapability(m_enHDMIId, &stSinkCap))
++    	fmt = stSinkCap.enNativeFormat;
++
++    return fmt;
++}
++
++bool CEGLNativeTypeHisilicon::HIADP_HDMI::GetNativeResolution(RESOLUTION_INFO *res)
++{
++    return FormatToResolution(GetNativeFormat(), res);
++}
++
++
++#endif /* USE_HI_ADP */
 +
 +CEGLNativeTypeHisilicon::CEGLNativeTypeHisilicon()
++	: m_pDisp(new HIADP_Disp),
++	  m_pHDMI(new HIADP_HDMI(HI_UNF_HDMI_ID_0))
 +{
-+  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CEGLNativeTypeHisilicon");
 +}
 +
 +CEGLNativeTypeHisilicon::~CEGLNativeTypeHisilicon()
 +{
-+  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::~CEGLNativeTypeHisilicon");
 +}
 +
 +bool CEGLNativeTypeHisilicon::CheckCompatibility()
 +{
-+  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CheckCompatibility");
-+  return true;
++  std::string sysfsName = "/sys/class/graphics/fb0/name";
++  std::string name;
++  SysfsUtils::GetString(sysfsName, name);
++  StringUtils::Trim(name);
++
++  CLog::Log(LOGDEBUG, "%s: %s = '%s'", __FUNCTION__, sysfsName.c_str(), name.c_str());
++
++  if (name == "hifb")
++    return true;
++
++  return false;
 +}
 +
 +void CEGLNativeTypeHisilicon::Initialize()
 +{
 +  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::Initialize");
++
 +  return;
 +}
 +
 +void CEGLNativeTypeHisilicon::Destroy()
 +{
 +  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::Destroy");
++
 +  return;
 +}
 +
 +bool CEGLNativeTypeHisilicon::CreateNativeDisplay()
 +{
-+  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CreateNativeDisplay");
++#ifdef USE_HI_ADP
++  HIADP_Disp_Init(HI_UNF_ENC_FMT_720P_50);
++#else
++  if (!m_pHDMI->Initialize())
++	  return false;
++
++  if (!m_pDisp->Initialize(m_pHDMI->GetNativeFormat()))
++	  return false;
++#endif
 +
 +  m_nativeDisplay = EGL_DEFAULT_DISPLAY;
 +
@@ -54,9 +625,67 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +  {
 +    return false;
 +  }
-+  nativeWindow->width = 1280;
-+  nativeWindow->height = 720;
++  nativeWindow->width = 1920; //1280;
++  nativeWindow->height = 1080; //720;
 +  m_nativeWindow = nativeWindow;
++
++  /* disable layer alpha */
++  int err;
++  /*HIFB_SIZE_S screenSize;*/
++  HIFB_ALPHA_S stAlpha; // = {0};
++  struct fb_var_screeninfo vinfo;
++
++#if 1
++  /**
++  ** Òª×¢ÒâÊÓÆµ²ãºÍÍ¼ÐÎ²ãµÄÓÅÏÈ¼¶£¬Ò»°ãÍ¼ÐÎ²ãÔÚÊÓÆµ²ãÉÏÃæ,
++  ** ÉèÖÃÍ¸Ã÷¿ÉÒÔÊ¹ÊÓÆµ²ãÉÏÏÔÊ¾Í¼ÐÎ£¬HIADP_Disp_InitÔÚÕâ¸öº¯ÊýÀïÃæ
++  **/
++  memset(&stAlpha, 0, sizeof(stAlpha));
++  stAlpha.bAlphaEnable  = HI_TRUE;
++  stAlpha.bAlphaChannel = HI_TRUE;
++  stAlpha.u8Alpha0 = 0xff;
++  stAlpha.u8Alpha1 = 0xff;
++  stAlpha.u8GlobalAlpha = 0xff;
++#endif
++
++  m_fb = open("/dev/fb0", O_RDWR, 0);
++
++  if (ioctl(m_fb, FBIOPUT_ALPHA_HIFB, &stAlpha) < 0)
++  {
++  	CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CreateNativeWindow: Unable to set alpha!");
++  }
++
++  if ((err = ioctl(m_fb, FBIOGET_VSCREENINFO, &vinfo)) < 0)
++  {
++  	CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CreateNativeWindow: Unable to FBIOGET_VSCREENINFO!, err=0x%x\n", err);
++    return false;
++  }
++
++  vinfo.bits_per_pixel = 32;
++  vinfo.red.length    = 8;
++  vinfo.green.length  = 8;
++  vinfo.blue.length   = 8;
++  vinfo.transp.length = 8;
++
++  vinfo.blue.offset  = 0;
++  vinfo.green.offset = 8;
++  vinfo.red.offset = 16;
++  vinfo.transp.offset = 24;
++
++  vinfo.xres = vinfo.xres_virtual = nativeWindow->width;
++  vinfo.yres = nativeWindow->height;
++  vinfo.yres_virtual = 2 * vinfo.yres;
++
++  if ((err = ioctl(m_fb, FBIOPUT_VSCREENINFO, &vinfo)) < 0)
++  {
++  	CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CreateNativeWindow: Unable to set double buffer mode!, err=0x%x\n", err);
++	vinfo.yres_virtual = vinfo.yres;
++	if ((err = ioctl(m_fb, FBIOPUT_VSCREENINFO, &vinfo)) < 0)
++	{
++	  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::CreateNativeWindow: Unable to FBIOPUT_VSCREENINFO!, err=0x%x\n", err);
++	  return false;
++	}
++  }
 +
 +  return true;
 +}
@@ -90,6 +719,13 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +bool CEGLNativeTypeHisilicon::DestroyNativeDisplay()
 +{
 +  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::DestroyNativeDisplay");
++
++#ifdef USE_HI_ADP
++  HIADP_Disp_DeInit();
++#else
++#warning TODO: replace HIADP_Disp_DeInit
++#endif
++
 +  return true;
 +}
 +
@@ -105,7 +741,7 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +bool CEGLNativeTypeHisilicon::GetNativeResolution(RESOLUTION_INFO *res) const
 +{
 +  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::GetNativeResolution");
-+  return true;
++  return m_pHDMI->GetNativeResolution(res);
 +}
 +
 +bool CEGLNativeTypeHisilicon::SetNativeResolution(const RESOLUTION_INFO &res)
@@ -117,7 +753,7 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +bool CEGLNativeTypeHisilicon::ProbeResolutions(std::vector<RESOLUTION_INFO> &resolutions)
 +{
 +  CLog::Log(LOGERROR, "CEGLNativeTypeHisilicon::ProbeResolutions");
-+  return true;
++  return m_pHDMI->ProbeResolutions(resolutions);
 +}
 +
 +bool CEGLNativeTypeHisilicon::GetPreferredResolution(RESOLUTION_INFO *res) const
@@ -132,10 +768,10 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +  return true;
 +}
 +
-diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.h
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.h
 --- kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	1970-01-01 01:00:00.000000000 +0100
-+++ kodi.orig/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	2016-02-20 10:04:15.024372807 +0100
-@@ -0,0 +1,30 @@
++++ kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	2016-03-04 10:21:10.356564397 +0100
+@@ -0,0 +1,39 @@
 +#pragma once
 +
 +#include "EGLNativeType.h"
@@ -165,10 +801,19 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h kodi.or
 +  virtual bool  GetPreferredResolution(RESOLUTION_INFO *res) const;
 +
 +  virtual bool  ShowWindow(bool show);
++
++private:
++  int m_fb;
++
++  class HIADP_Disp;
++  class HIADP_HDMI;
++
++  HIADP_Disp* m_pDisp;
++  HIADP_HDMI* m_pHDMI;
 +};
-diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp kodi.orig/xbmc/windowing/egl/EGLWrapper.cpp
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp kodi.work/xbmc/windowing/egl/EGLWrapper.cpp
 --- kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp	2015-10-23 23:53:23.000000000 +0200
-+++ kodi.orig/xbmc/windowing/egl/EGLWrapper.cpp	2016-02-20 09:58:25.796366074 +0100
++++ kodi.work/xbmc/windowing/egl/EGLWrapper.cpp	2016-03-01 11:43:14.107605563 +0100
 @@ -36,6 +36,9 @@
  #if defined(HAS_IMXVPU)
    #include "EGLNativeTypeIMX.h"
@@ -189,9 +834,9 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp kodi.orig/xbmc/wi
        (nativeGuess = CreateEGLNativeType<CEGLNativeTypeAmlogic>(implementation))
        )
    {
-diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/Makefile.in kodi.orig/xbmc/windowing/egl/Makefile.in
+diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/Makefile.in kodi.work/xbmc/windowing/egl/Makefile.in
 --- kodi-15.2-02e7013/xbmc/windowing/egl/Makefile.in	2015-10-23 23:53:23.000000000 +0200
-+++ kodi.orig/xbmc/windowing/egl/Makefile.in	2016-02-20 10:22:05.236393438 +0100
++++ kodi.work/xbmc/windowing/egl/Makefile.in	2016-03-01 11:43:14.103605563 +0100
 @@ -13,6 +13,7 @@
  ifeq (@USE_IMXVPU@,1)
  SRCS+= EGLNativeTypeIMX.cpp
