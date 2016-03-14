@@ -206,6 +206,8 @@ if [ ! "$KODIPLAYER_DRIVER" = default ]; then
     PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET gpu-viv-g2d"
   elif [ "$KODIPLAYER_DRIVER" = libamcodec ]; then
     KODI_CODEC="--enable-codec=amcodec"
+  elif [ "$KODIPLAYER_DRIVER" = hisi-samples ]; then
+    KODI_CODEC="--enable-codec=hisilicon"
   else
     KODI_OPENMAX="--disable-openmax"
   fi

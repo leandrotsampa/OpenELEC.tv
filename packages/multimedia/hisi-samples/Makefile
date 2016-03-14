@@ -14,6 +14,10 @@ ifeq ($(CFG_HI_GPU),y)
 objects += gpu
 endif 
 
+ifeq ($(CFG_HI_PLAYER_SUPPORT),y)
+objects += localplay
+endif
+
 objects += common
 
 ifeq (${obj},)

@@ -58,6 +58,7 @@ makeinstall_target() {
   cp $ROOT/$PKG_BUILD/fb/sample_fb $INSTALL/sample/.
   cp $ROOT/$PKG_BUILD/gpu/src/es11/coverflow/coverflow $INSTALL/sample/.
   cp -R $ROOT/$PKG_BUILD/gpu/src/es11/coverflow/coverflow_res $INSTALL/sample/.
+  cp $ROOT/$PKG_BUILD/localplay/sample_localplay $INSTALL/sample/.
 }
 
 

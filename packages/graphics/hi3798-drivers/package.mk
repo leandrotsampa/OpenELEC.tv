@@ -102,6 +102,10 @@ make_target() {
     cp -PRv include/hi_go_text.h $SYSROOT_PREFIX/usr/include
     cp -PRv include/hi_go_winc.h $SYSROOT_PREFIX/usr/include
     cp -PRv include/hi_go_cursor.h $SYSROOT_PREFIX/usr/include
+    cp -PRv include/hi_svr_codec.h $SYSROOT_PREFIX/usr/include
+    cp -PRv include/hi_svr_format.h $SYSROOT_PREFIX/usr/include
+    cp -PRv include/hi_svr_metadata.h $SYSROOT_PREFIX/usr/include
+    cp -PRv include/hi_svr_player.h $SYSROOT_PREFIX/usr/include
     
   mkdir -p $SYSROOT_PREFIX/usr/lib
     cp -PRv lib/share/libMali.so $SYSROOT_PREFIX/usr/lib
@@ -112,6 +116,9 @@ make_target() {
 #    cp -PRv lib/share/libhigoadp.so $SYSROOT_PREFIX/usr/lib
     cp -PRv lib/static/libhigo.a $SYSROOT_PREFIX/usr/lib
     cp -PRv lib/static/libhigoadp.a $SYSROOT_PREFIX/usr/lib
+    cp -PRv lib/share/libplayer.so $SYSROOT_PREFIX/usr/lib
+    cp -PRv lib/share/libhi_so.so $SYSROOT_PREFIX/usr/lib
+    cp -PRv lib/share/libsubdec.so $SYSROOT_PREFIX/usr/lib
     
     cd $SYSROOT_PREFIX/usr/lib
 	ln -sf libMali.so       libEGL.so.1.4
@@ -137,6 +144,22 @@ makeinstall_target() {
     cp -PRv lib/share/libjpeg6b.so $INSTALL/usr/lib
 #    cp -PRv lib/share/libhigo.so $INSTALL/usr/lib
 #    cp -PRv lib/share/libhigoadp.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libHA.AUDIO*.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libHV.VIDEO*.so $INSTALL/usr/lib
+    cp -PRv lib/share/libplayer.so $INSTALL/usr/lib
+    cp -PRv lib/share/libhi_so.so $INSTALL/usr/lib
+    cp -PRv lib/share/libsubdec.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libformat.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libffmpegformat.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libavformat.so.53 $INSTALL/usr/lib
+    cp -PRv lib/extern/libavcodec.so.53 $INSTALL/usr/lib
+    cp -PRv lib/extern/libavutil.so.51 $INSTALL/usr/lib
+    cp -PRv lib/extern/libtlsadp.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libssl.so.1.0.0 $INSTALL/usr/lib
+    cp -PRv lib/extern/libcrypto.so.1.0.0 $INSTALL/usr/lib
+#    cp -PRv lib/extern/libbluray.so.1 $INSTALL/usr/lib
+    cp -PRv lib/extern/libswscale.so.2 $INSTALL/usr/lib
+    cp -PRv lib/extern/libHiDrmEngine.so $INSTALL/usr/lib
     
     cd $INSTALL/usr/lib
 	ln -sf libMali.so       libEGL.so.1.4
