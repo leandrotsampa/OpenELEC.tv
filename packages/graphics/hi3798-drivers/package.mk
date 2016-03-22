@@ -56,6 +56,7 @@ make_target() {
     cp -PRv include/hi_unf_vo.h $SYSROOT_PREFIX/usr/include
     cp -PRv include/hi_unf_disp.h $SYSROOT_PREFIX/usr/include
     cp -PRv include/hi_unf_hdmi.h $SYSROOT_PREFIX/usr/include
+    cp -PRv include/hi_unf_so.h $SYSROOT_PREFIX/usr/include
     cp -PRv include/hi_unf_sound.h $SYSROOT_PREFIX/usr/include
     cp -PRv include/hi_unf_edid.h $SYSROOT_PREFIX/usr/include
     cp -PRv include/hi_unf_ai.h $SYSROOT_PREFIX/usr/include
