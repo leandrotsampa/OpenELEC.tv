@@ -208,6 +208,8 @@ if [ ! "$KODIPLAYER_DRIVER" = default ]; then
     KODI_CODEC="--enable-codec=amcodec"
   elif [ "$KODIPLAYER_DRIVER" = hisi-samples ]; then
     KODI_CODEC="--enable-codec=hisilicon"
+    KODI_OPENMAX="--enable-openmax"
+    PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET hi3798-drivers" #contains openmax
   else
     KODI_OPENMAX="--disable-openmax"
   fi

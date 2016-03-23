@@ -1,0 +1,138 @@
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMax.cpp kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMax.cpp
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMax.cpp	2015-10-23 23:53:21.000000000 +0200
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMax.cpp	2016-03-22 21:35:13.838513615 +0100
+@@ -61,7 +61,7 @@
+ 
+ class DllLibOpenMax : public DllDynamic, DllLibOpenMaxInterface
+ {
+-  DECLARE_DLL_WRAPPER(DllLibOpenMax, "libnvomx.so")
++  DECLARE_DLL_WRAPPER(DllLibOpenMax, "libOMX_Core.so")
+ 
+   DEFINE_METHOD0(OMX_ERRORTYPE, OMX_Init)
+   DEFINE_METHOD0(OMX_ERRORTYPE, OMX_Deinit)
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMaxVideo.cpp kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMaxVideo.cpp
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMaxVideo.cpp	2015-10-23 23:53:21.000000000 +0200
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/OpenMaxVideo.cpp	2016-03-23 10:45:50.588622608 +0100
+@@ -41,6 +41,8 @@
+ #include <OMX_Index.h>
+ #include <OMX_Image.h>
+ 
++#include "hi_common.h"
++
+ #if 1
+ //#define OMX_DEBUG_EMPTYBUFFERDONE
+ #define OMX_DEBUG_VERBOSE
+@@ -59,7 +61,7 @@
+ #define OMX_H264HIGH_DECODER    "OMX.Nvidia.h264ext.decode"
+ #define OMX_MPEG4_DECODER       "OMX.Nvidia.mp4.decode"
+ #define OMX_MPEG4EXT_DECODER    "OMX.Nvidia.mp4ext.decode"
+-#define OMX_MPEG2V_DECODER      "OMX.Nvidia.mpeg2v.decode"
++#define OMX_MPEG2V_DECODER      "OMX.hisi.video.decoder"
+ #define OMX_VC1_DECODER         "OMX.Nvidia.vc1.decode"
+ 
+ // EGL extension functions
+@@ -216,6 +218,9 @@
+ 
+   // Component will be in OMX_StateLoaded now so we can alloc omx input/output buffers.
+   // we can only alloc them in OMX_StateLoaded state or if the component port is disabled
++
++  OMX_SendCommand(m_omx_decoder, OMX_CommandStateSet, OMX_StateIdle, 0);
++
+   // Alloc buffers for the omx input port.
+   omx_err = AllocOMXInputBuffers();
+   if (omx_err)
+@@ -584,7 +589,7 @@
+ 
+   port_param.nPortIndex = m_omx_input_port;
+ 
+-  for (port_param.nProfileIndex = 0;; port_param.nProfileIndex++)
++  for (port_param.nIndex = 0;; port_param.nIndex++)
+   {
+     omx_err = OMX_GetParameter(m_omx_decoder,
+       OMX_IndexParamVideoProfileLevelQuerySupported, &port_param);
+@@ -625,9 +630,14 @@
+   return omx_err;
+ }
+ 
++
++static std::vector<HI_MMZ_BUF_S*> m_mmz_input_buffers;
++
++
+ OMX_ERRORTYPE COpenMaxVideo::AllocOMXInputBuffers(void)
+ {
+   OMX_ERRORTYPE omx_err = OMX_ErrorNone;
++  HI_S32 s32Res;
+ 
+   // Obtain the information about the decoder input port.
+   OMX_PARAM_PORTDEFINITIONTYPE port_format;
+@@ -646,8 +656,24 @@
+     // use an external buffer that's sized according to actual demux
+     // packet size, start at internal's buffer size, will get deleted when
+     // we start pulling demuxer packets and using demux packet sized buffers.
++#if 0
+     OMX_U8* data = new OMX_U8[port_format.nBufferSize];
+-    omx_err = OMX_UseBuffer(m_omx_decoder, &buffer, m_omx_input_port, NULL, port_format.nBufferSize, data);
++#else
++    HI_MMZ_BUF_S* mmz_buff = new HI_MMZ_BUF_S;
++    mmz_buff->bufsize = port_format.nBufferSize;
++    strcpy(mmz_buff->bufname, "OMX_VDEC_IN");
++    s32Res = HI_MMZ_Malloc(mmz_buff);
++    if (s32Res != HI_SUCCESS)
++    {
++      CLog::Log(LOGERROR, "%s::%s - HI_MMZ_Malloc failed with s32Res(0x%x)\n",
++        CLASSNAME, __func__, s32Res);
++      return(OMX_ErrorInsufficientResources);
++    }
++    private_handle_t private_handle;
++    private_handle.ion_phy_addr = mmz_buff->phyaddr;
++#endif
++    omx_err = OMX_UseBuffer(m_omx_decoder, &buffer, m_omx_input_port, NULL, port_format.nBufferSize,
++    		(OMX_U8*)&private_handle);
+     if (omx_err)
+     {
+       CLog::Log(LOGERROR, "%s::%s - OMX_UseBuffer failed with omx_err(0x%x)\n",
+@@ -657,6 +683,7 @@
+     m_omx_input_buffers.push_back(buffer);
+     // don't have to lock/unlock here, we are not decoding
+     m_omx_input_avaliable.push(buffer);
++    m_mmz_input_buffers.push_back(mmz_buff);
+   }
+   m_omx_input_eos = false;
+ 
+@@ -664,6 +691,7 @@
+ }
+ OMX_ERRORTYPE COpenMaxVideo::FreeOMXInputBuffers(bool wait)
+ {
++  HI_S32 s32Res;
+   OMX_ERRORTYPE omx_err = OMX_SendCommand(m_omx_decoder, OMX_CommandFlush, m_omx_input_port, 0);
+   if (omx_err)
+     CLog::Log(LOGERROR, "%s::%s - OMX_CommandFlush failed with omx_err(0x%x)\n",
+@@ -679,8 +707,19 @@
+     delete [] m_omx_input_buffers[i]->pBuffer;
+     m_omx_input_buffers[i]->pBuffer = NULL;
+     omx_err = OMX_FreeBuffer(m_omx_decoder, m_omx_input_port, m_omx_input_buffers[i]);
++
++    HI_MMZ_BUF_S* mmz_buff = m_mmz_input_buffers[i];
++    s32Res = HI_MMZ_Free(mmz_buff);
++    if (s32Res != HI_SUCCESS)
++    {
++      CLog::Log(LOGERROR, "%s::%s - HI_MMZ_Free failed with s32Res(0x%x)\n",
++        CLASSNAME, __func__, s32Res);
++      //return(OMX_ErrorInsufficientResources);
++    }
++
+   }
+   m_omx_input_buffers.clear();
++  m_mmz_input_buffers.clear();
+ 
+   // empty input buffer queue. not decoding so don't need lock/unlock.
+   while (!m_omx_input_avaliable.empty())
+@@ -906,7 +945,7 @@
+           ctx->m_omx_decoder_state = (int)nData2;
+           switch (ctx->m_omx_decoder_state)
+           {
+-            case OMX_StateInvalid:
++            case OMX_StateReserved_0x00000000:
+               CLog::Log(LOGDEBUG, "%s::%s - OMX_StateInvalid\n", CLASSNAME, __func__);
+             break;
+             case OMX_StateLoaded:

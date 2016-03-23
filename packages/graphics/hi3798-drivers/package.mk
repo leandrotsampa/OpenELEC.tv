@@ -36,6 +36,15 @@ pre_build_target() {
   mkdir -p $PKG_BUILD
   cp $PKG_DIR/base.mak $PKG_BUILD/.
   cp $PKG_DIR/cfg.mak $PKG_BUILD/.
+  cp $PKG_DIR/openmax/include/OMX_Core.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_Index.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_Types.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_Component.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_Audio.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_Video.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_Image.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_Other.h $SYSROOT_PREFIX/usr/include
+  cp $PKG_DIR/openmax/include/OMX_IVCommon.h $SYSROOT_PREFIX/usr/include
 } 
 
 make_target() {
@@ -161,6 +170,9 @@ makeinstall_target() {
 #    cp -PRv lib/extern/libbluray.so.1 $INSTALL/usr/lib
     cp -PRv lib/extern/libswscale.so.2 $INSTALL/usr/lib
     cp -PRv lib/extern/libHiDrmEngine.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libOMX_Core.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libOMX.hisi.video.decoder.so $INSTALL/usr/lib
+    cp -PRv lib/extern/libOMX.hisi.video.encoder.so $INSTALL/usr/lib
     
     cd $INSTALL/usr/lib
 	ln -sf libMali.so       libEGL.so.1.4
