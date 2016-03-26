@@ -1,0 +1,1650 @@
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/DVDFactoryCodec.cpp kodi.work/xbmc/cores/dvdplayer/DVDCodecs/DVDFactoryCodec.cpp
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/DVDFactoryCodec.cpp	2015-10-23 23:53:21.000000000 +0200
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/DVDFactoryCodec.cpp	2016-03-23 14:23:46.857823377 +0100
+@@ -50,6 +50,9 @@
+ #include "Video/DVDVideoCodecAndroidMediaCodec.h"
+ #include "android/activity/AndroidFeatures.h"
+ #endif
++
++#include "Video/DVDVideoCodecHisi.h"
++
+ #include "Audio/DVDAudioCodecFFmpeg.h"
+ #include "Audio/DVDAudioCodecPassthrough.h"
+ #include "Overlay/DVDOverlayCodecSSA.h"
+@@ -146,6 +149,9 @@
+   //when support for a hardware decoder is not compiled in
+   //only print it if it's actually available on the platform
+   std::string hwSupport;
++
++  hwSupport += "HISICodec:yes ";
++
+ #if defined(TARGET_DARWIN_OSX)
+   hwSupport += "VDADecoder:yes ";
+ #endif
+@@ -201,6 +207,8 @@
+ #endif
+   CLog::Log(LOGDEBUG, "CDVDFactoryCodec: compiled in hardware support: %s", hwSupport.c_str());
+ 
++  if ( (pCodec = OpenCodec(new CDVDVideoCodecHisi(), hint, options)) ) return pCodec;
++
+   if (hint.stills && (hint.codec == AV_CODEC_ID_MPEG2VIDEO || hint.codec == AV_CODEC_ID_MPEG1VIDEO))
+   {
+      // If dvd is an mpeg2 and hint.stills
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiComm.h kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiComm.h
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiComm.h	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiComm.h	2016-03-24 16:26:41.997781912 +0100
+@@ -0,0 +1,72 @@
++
++#pragma once
++
++#include "DynamicDll.h"
++#include "hi_common.h"
++
++class DllLibhicommCodecInterface
++{
++public:
++  virtual ~DllLibhicommCodecInterface() {}
++
++  virtual HI_S32 HI_SYS_Init() = 0; //28
++  virtual HI_S32 HI_SYS_DeInit() = 0; //32
++#if 0 //HiSTBLinuxV100R004C00SPC030
++  virtual HI_S32 HI_SYS_PreAV(HI_SYS_PREAV_PARAM_S *pstPreParm) = 0; //36
++#else //HiSTBLinuxV100R003C00SPC020
++  virtual HI_S32 HI_SYS_PreAV(void*) = 0; //36
++#endif
++#if 0
++  DllLibHiComm::HI_SYS_GetPlayTime, //40
++  DllLibHiComm::HI_SYS_GetVersion, //44
++  DllLibHiComm::HI_SYS_SetConf, //48
++  DllLibHiComm::HI_SYS_GetConf, //52
++  DllLibHiComm::HI_SYS_SetLogLevel, //56
++  DllLibHiComm::HI_SYS_WriteRegister, //60
++  DllLibHiComm::HI_SYS_ReadRegister, //64
++  DllLibHiComm::HI_MMZ_Malloc, //68
++  DllLibHiComm::HI_MMZ_Free, //72
++  DllLibHiComm::HI_MMZ_New, //76
++  DllLibHiComm::HI_MMZ_Delete, //80
++  DllLibHiComm::HI_MMZ_Map, //84
++  DllLibHiComm::HI_MMZ_Unmap, //88
++  DllLibHiComm::HI_MMZ_Flush, //92
++  DllLibHiComm::HI_MEM_Map, //96
++  DllLibHiComm::HI_MEM_Unmap, //100
++  DllLibHiComm::HI_MMZ_GetPhyaddr //104
++#endif
++
++};
++
++#if 0
++class DllLibHiComm : public DllDynamic, public DllLibhicommCodecInterface
++{
++  DECLARE_DLL_WRAPPER(DllLibhicomm, "libhi_common.so")
++
++};
++#else
++class DllLibHiComm : public DllLibhicommCodecInterface
++{
++public:
++  virtual ~DllLibHiComm() {}
++  virtual bool Load() { return true; }
++
++  virtual HI_S32 HI_SYS_Init() { return ::HI_SYS_Init(); }
++  virtual HI_S32 HI_SYS_DeInit() { return ::HI_SYS_DeInit(); }
++#if 0 //HiSTBLinuxV100R004C00SPC030
++  virtual HI_S32 HI_SYS_PreAV(HI_SYS_PREAV_PARAM_S *pstPreParm)
++  {
++    return ::HI_SYS_PreAV(pstPreParm);
++  }
++#else //HiSTBLinuxV100R003C00SPC020
++  virtual HI_S32 HI_SYS_PreAV(void*)
++  {
++    return HI_SUCCESS;
++  }
++#endif
++
++};
++#endif
++
++
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiMpi.h kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiMpi.h
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiMpi.h	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiMpi.h	2016-03-26 16:37:39.989732723 +0100
+@@ -0,0 +1,157 @@
++
++#pragma once
++
++#include "DynamicDll.h"
++#include "hi_unf_avplay.h"
++#include "hi_unf_vo.h"
++
++class DllLibhimpiCodecInterface
++{
++public:
++  virtual ~DllLibhimpiCodecInterface() {}
++
++  virtual HI_S32 HI_UNF_AVPLAY_Init() = 0; //28
++  virtual HI_S32 HI_UNF_AVPLAY_DeInit() = 0; //32
++  virtual HI_S32 HI_UNF_AVPLAY_GetDefaultConfig(HI_UNF_AVPLAY_ATTR_S*, HI_UNF_AVPLAY_STREAM_TYPE_E) = 0; //36
++  virtual HI_S32 HI_UNF_AVPLAY_Create(const HI_UNF_AVPLAY_ATTR_S*, HI_HANDLE*) = 0; //40
++  virtual HI_S32 HI_UNF_AVPLAY_Destroy(HI_HANDLE hAvplay) = 0; //44
++  virtual HI_S32 HI_UNF_AVPLAY_SetAttr(HI_HANDLE, HI_UNF_AVPLAY_ATTR_ID_E, HI_VOID*) = 0; //48
++  virtual HI_S32 HI_UNF_AVPLAY_GetAttr(HI_HANDLE, HI_UNF_AVPLAY_ATTR_ID_E, HI_VOID*) = 0; //52
++  virtual HI_S32 HI_UNF_AVPLAY_ChnOpen(HI_HANDLE, HI_UNF_AVPLAY_MEDIA_CHAN_E, const HI_VOID*) = 0; //64
++  virtual HI_S32 HI_UNF_AVPLAY_ChnClose(HI_HANDLE hAvplay, HI_UNF_AVPLAY_MEDIA_CHAN_E enChn) = 0; //68
++  virtual HI_S32 HI_UNF_AVPLAY_Start(HI_HANDLE hAvplay, HI_UNF_AVPLAY_MEDIA_CHAN_E enChn, const HI_UNF_AVPLAY_START_OPT_S *pstStartOpt) = 0; //72
++  virtual HI_S32 HI_UNF_AVPLAY_Stop(HI_HANDLE hAvplay, HI_UNF_AVPLAY_MEDIA_CHAN_E enChn, const HI_UNF_AVPLAY_STOP_OPT_S *pstStopOpt) = 0; //76
++  virtual HI_S32 HI_UNF_AVPLAY_GetBuf(HI_HANDLE  hAvplay, HI_UNF_AVPLAY_BUFID_E enBufId,
++          HI_U32                u32ReqLen,
++          HI_UNF_STREAM_BUF_S  *pstData,
++          HI_U32                u32TimeOutMs) = 0; //88
++  virtual HI_S32 HI_UNF_AVPLAY_PutBuf(HI_HANDLE hAvplay, HI_UNF_AVPLAY_BUFID_E enBufId,
++                           HI_U32 u32ValidDataLen, HI_U32 u32PtsMs) = 0; //92
++  virtual HI_S32 HI_UNF_AVPLAY_GetStatusInfo(HI_HANDLE hAvplay, HI_UNF_AVPLAY_STATUS_INFO_S *pstStatusInfo) = 0; //96
++  virtual HI_S32 HI_UNF_VO_Init(HI_UNF_VO_DEV_MODE_E enDevMode) = 0; //128
++#if 0 //HiSTBLinuxV100R004C00SPC030
++  virtual HI_S32 HI_UNF_VO_Open(HI_UNF_VO_E enVo) = 0; //132
++#else //HiSTBLinuxV100R003C00SPC020
++  virtual HI_S32 HI_UNF_VO_Open(int) = 0; //132
++#endif
++  virtual HI_S32 HI_UNF_VO_CreateWindow(const HI_UNF_WINDOW_ATTR_S*, HI_HANDLE*) = 0; //136
++  virtual HI_S32 HI_UNF_VO_DestroyWindow(HI_HANDLE hWindow) = 0; //140
++  virtual HI_S32 HI_UNF_VO_AttachWindow(HI_HANDLE, HI_HANDLE) = 0; //144
++  virtual HI_S32 HI_UNF_VO_DetachWindow(HI_HANDLE hWindow, HI_HANDLE hSrc) = 0; //148
++  virtual HI_S32 HI_UNF_VO_SetWindowEnable(HI_HANDLE hWindow, HI_BOOL bEnable) = 0; //152
++  virtual HI_S32 HI_UNF_DISP_SetLayerZorder(HI_UNF_DISP_E, HI_UNF_DISP_LAYER_E, HI_LAYER_ZORDER_E) = 0; //156
++#if 0
++	  DllLibHiMpi::HI_UNF_AVPLAY_RegisterEvent, //56
++	  DllLibHiMpi::HI_UNF_AVPLAY_UnRegisterEvent, //60
++	  DllLibHiMpi::HI_UNF_AVPLAY_Pause, //80
++	  DllLibHiMpi::HI_UNF_AVPLAY_Resume, //84
++	  DllLibHiMpi::HI_UNF_SND_Attach, //100
++	  DllLibHiMpi::HI_UNF_SND_Detach, //104
++	  DllLibHiMpi::HI_UNF_SND_SetSpdifPassThrough, //108
++	  DllLibHiMpi::HI_UNF_SND_SetHdmiPassThrough, //112
++	  DllLibHiMpi::HI_UNF_SND_SetVolume, //116
++	  DllLibHiMpi::HI_UNF_SND_GetVolume, //120
++	  DllLibHiMpi::HI_UNF_SND_SetMute, //124
++	  DllLibHiMpi::HI_UNF_VO_CreateWindow, //136
++	  DllLibHiMpi::HI_UNF_SND_Open, //160
++	  DllLibHiMpi::HI_UNF_SND_Close //164
++#endif
++};
++
++#if 0
++class DllLibHiMpi : public DllDynamic, public DllLibhimpiCodecInterface
++{
++  DECLARE_DLL_WRAPPER(DllLibHiMpi, "libhi_mpi.so")
++
++};
++#else
++class DllLibHiMpi : public DllLibhimpiCodecInterface
++{
++public:
++  virtual ~DllLibHiMpi() {}
++  virtual bool Load() { return true; }
++
++  virtual HI_S32 HI_UNF_AVPLAY_Init() { return ::HI_UNF_AVPLAY_Init(); }
++  virtual HI_S32 HI_UNF_AVPLAY_DeInit() { return ::HI_UNF_AVPLAY_DeInit(); }
++  virtual HI_S32 HI_UNF_AVPLAY_GetDefaultConfig(HI_UNF_AVPLAY_ATTR_S *pstAvAttr, HI_UNF_AVPLAY_STREAM_TYPE_E enCfg)
++  {
++    return ::HI_UNF_AVPLAY_GetDefaultConfig(pstAvAttr, enCfg);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_Create(const HI_UNF_AVPLAY_ATTR_S *pstAvAttr, HI_HANDLE *phAvplay)
++  {
++    return ::HI_UNF_AVPLAY_Create(pstAvAttr, phAvplay);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_Destroy(HI_HANDLE hAvplay) { return ::HI_UNF_AVPLAY_Destroy(hAvplay); }
++  virtual HI_S32 HI_UNF_AVPLAY_SetAttr(HI_HANDLE hAvplay, HI_UNF_AVPLAY_ATTR_ID_E enAttrID, HI_VOID *pPara)
++  {
++    return ::HI_UNF_AVPLAY_SetAttr(hAvplay, enAttrID, pPara);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_GetAttr(HI_HANDLE hAvplay, HI_UNF_AVPLAY_ATTR_ID_E enAttrID, HI_VOID *pPara)
++  {
++    return ::HI_UNF_AVPLAY_GetAttr(hAvplay, enAttrID, pPara);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_ChnOpen(HI_HANDLE hAvplay, HI_UNF_AVPLAY_MEDIA_CHAN_E enChn, const HI_VOID *pPara)
++  {
++    return ::HI_UNF_AVPLAY_ChnOpen(hAvplay, enChn, pPara);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_ChnClose(HI_HANDLE hAvplay, HI_UNF_AVPLAY_MEDIA_CHAN_E enChn)
++  {
++    return ::HI_UNF_AVPLAY_ChnClose(hAvplay, enChn);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_Start(HI_HANDLE hAvplay, HI_UNF_AVPLAY_MEDIA_CHAN_E enChn, const HI_UNF_AVPLAY_START_OPT_S *pstStartOpt)
++  {
++	return ::HI_UNF_AVPLAY_Start(hAvplay, enChn, pstStartOpt);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_Stop(HI_HANDLE hAvplay, HI_UNF_AVPLAY_MEDIA_CHAN_E enChn, const HI_UNF_AVPLAY_STOP_OPT_S *pstStopOpt)
++  {
++    return ::HI_UNF_AVPLAY_Stop(hAvplay, enChn, pstStopOpt);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_GetBuf(HI_HANDLE  hAvplay, HI_UNF_AVPLAY_BUFID_E enBufId,
++          HI_U32                u32ReqLen,
++          HI_UNF_STREAM_BUF_S  *pstData,
++          HI_U32                u32TimeOutMs)
++  {
++    return ::HI_UNF_AVPLAY_GetBuf(hAvplay, enBufId, u32ReqLen, pstData, u32TimeOutMs);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_PutBuf(HI_HANDLE hAvplay, HI_UNF_AVPLAY_BUFID_E enBufId,
++                           HI_U32 u32ValidDataLen, HI_U32 u32PtsMs)
++  {
++    return ::HI_UNF_AVPLAY_PutBuf(hAvplay, enBufId, u32ValidDataLen, u32PtsMs);
++  }
++  virtual HI_S32 HI_UNF_AVPLAY_GetStatusInfo(HI_HANDLE hAvplay, HI_UNF_AVPLAY_STATUS_INFO_S *pstStatusInfo)
++  {
++    return ::HI_UNF_AVPLAY_GetStatusInfo(hAvplay, pstStatusInfo);
++  }
++  virtual HI_S32 HI_UNF_VO_Init(HI_UNF_VO_DEV_MODE_E enDevMode) { return ::HI_UNF_VO_Init(enDevMode); }
++#if 0 //HiSTBLinuxV100R004C00SPC030
++  virtual HI_S32 HI_UNF_VO_Open(HI_UNF_VO_E enVo) { return ::HI_UNF_VO_Open(enVo); }
++#else //HiSTBLinuxV100R003C00SPC020
++  virtual HI_S32 HI_UNF_VO_Open(int) { return HI_SUCCESS; }
++#endif
++  virtual HI_S32 HI_UNF_VO_CreateWindow(const HI_UNF_WINDOW_ATTR_S *pWinAttr, HI_HANDLE *phWindow)
++  {
++    return ::HI_UNF_VO_CreateWindow(pWinAttr, phWindow);
++  }
++  virtual HI_S32 HI_UNF_VO_DestroyWindow(HI_HANDLE hWindow) { return ::HI_UNF_VO_DestroyWindow(hWindow); }
++  virtual HI_S32 HI_UNF_VO_AttachWindow(HI_HANDLE hWindow, HI_HANDLE hSrc)
++  {
++    return ::HI_UNF_VO_AttachWindow(hWindow, hSrc);
++  }
++  virtual HI_S32 HI_UNF_VO_DetachWindow(HI_HANDLE hWindow, HI_HANDLE hSrc)
++  {
++    return ::HI_UNF_VO_DetachWindow(hWindow, hSrc);
++  }
++  virtual HI_S32 HI_UNF_VO_SetWindowEnable(HI_HANDLE hWindow, HI_BOOL bEnable)
++  {
++	return ::HI_UNF_VO_SetWindowEnable(hWindow, bEnable);
++  }
++  virtual HI_S32 HI_UNF_DISP_SetLayerZorder(HI_UNF_DISP_E enDisp, HI_UNF_DISP_LAYER_E enLayer, HI_LAYER_ZORDER_E enZFlag)
++  {
++    return ::HI_UNF_DISP_SetLayerZorder(enDisp, enLayer, enZFlag);
++  }
++
++};
++#endif
++
++
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.cpp kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.cpp
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.cpp	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.cpp	2016-03-25 16:24:43.529165667 +0100
+@@ -0,0 +1,65 @@
++
++
++#include "DllLibHiSample.h"
++#include "utils/log.h"
++#include "hi_unf_avplay.h"
++
++
++HI_S32 DllLibHiSample::HIADP_VO_Init(HI_UNF_VO_DEV_MODE_E enDevMode)
++{
++  CLog::Log(LOGDEBUG, "DllLibHiSample::HIADP_VO_Init - TODO");
++
++  return HI_SUCCESS;
++}
++
++HI_S32 DllLibHiSample::HIADP_VO_DeInit()
++{
++  CLog::Log(LOGDEBUG, "DllLibHiSample::HIADP_VO_DeInit - TODO");
++
++  return HI_SUCCESS;
++}
++
++HI_S32 DllLibHiSample::HIADP_Disp_Init(HI_UNF_ENC_FMT_E enFormat)
++{
++  CLog::Log(LOGDEBUG, "DllLibHiSample::HIADP_Disp_Init - TODO");
++
++  return HI_SUCCESS;
++}
++
++HI_S32 DllLibHiSample::HIADP_Disp_DeInit()
++{
++  CLog::Log(LOGDEBUG, "DllLibHiSample::HIADP_Disp_DeInit - TODO");
++
++  return HI_SUCCESS;
++}
++
++HI_S32 DllLibHiSample::HIADP_AVPlay_SetVdecAttr(HI_HANDLE hAvplay,HI_UNF_VCODEC_TYPE_E enType,HI_UNF_VCODEC_MODE_E enMode)
++{
++  HI_S32 Ret;
++  HI_UNF_VCODEC_ATTR_S        VdecAttr;
++
++  Ret = ::HI_UNF_AVPLAY_GetAttr(hAvplay, HI_UNF_AVPLAY_ATTR_ID_VDEC, &VdecAttr);
++  if (HI_SUCCESS != Ret)
++  {
++	  CLog::Log(LOGERROR, "DllLibHiSample::HIADP_AVPlay_SetVdecAttr: HI_UNF_AVPLAY_GetAttr failed:%#x\n",Ret);
++      return Ret;
++  }
++
++  VdecAttr.enType = enType;
++  VdecAttr.enMode = enMode;
++  VdecAttr.u32ErrCover = 100;
++  VdecAttr.u32Priority = 3;
++
++  Ret = ::HI_UNF_AVPLAY_SetAttr(hAvplay, HI_UNF_AVPLAY_ATTR_ID_VDEC, &VdecAttr);
++  if (Ret != HI_SUCCESS)
++  {
++	  CLog::Log(LOGERROR, "DllLibHiSample::HIADP_AVPlay_SetVdecAttr: call HI_UNF_AVPLAY_SetAttr failed.\n");
++      return Ret;
++  }
++
++  return Ret;
++}
++
++
++
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.h kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.h
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.h	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DllLibHiSample.h	2016-03-25 15:51:06.335927875 +0100
+@@ -0,0 +1,51 @@
++
++#pragma once
++
++#include "DynamicDll.h"
++#include "hi_unf_vo.h"
++
++class DllLibhisampleCodecInterface
++{
++public:
++  virtual ~DllLibhisampleCodecInterface() {}
++
++  virtual HI_S32 HIADP_VO_Init(HI_UNF_VO_DEV_MODE_E) = 0; //28
++  virtual HI_S32 HIADP_VO_DeInit() = 0; //36
++  virtual HI_S32 HIADP_Disp_Init(HI_UNF_ENC_FMT_E enFormat) = 0; //48
++  virtual HI_S32 HIADP_Disp_DeInit() = 0; //52
++  virtual HI_S32 HIADP_AVPlay_SetVdecAttr(HI_HANDLE hAvplay,HI_UNF_VCODEC_TYPE_E enType,HI_UNF_VCODEC_MODE_E enMode) = 0; //64
++#if 0
++	  DllLibHiSample::HIADP_VO_CreatWin, //32
++	  DllLibHiSample::HIADP_Snd_Init, //40
++	  DllLibHiSample::HIADP_Snd_DeInit, //44
++	  DllLibHiSample::HIADP_Disp_Init, //48
++	  DllLibHiSample::HIADP_AVPlay_RegADecLib, //56
++	  DllLibHiSample::HIADP_AVPlay_Init, //60
++	  DllLibHiSample::HIADP_AVPlay_SetVdecAdvAttr, //68
++	  DllLibHiSample::HIADP_AVPlay_SetAdecAttr //72
++#endif
++};
++
++#if 0
++class DllLibHiSample : public DllDynamic, public DllLibhisampleCodecInterface
++{
++  DECLARE_DLL_WRAPPER(DllLibHiSample, "libsample_common.so")
++
++};
++#else
++class DllLibHiSample : public DllLibhisampleCodecInterface
++{
++public:
++  virtual ~DllLibHiSample() {}
++  virtual bool Load() { return true; }
++
++  virtual HI_S32 HIADP_VO_Init(HI_UNF_VO_DEV_MODE_E enDevMode);
++  virtual HI_S32 HIADP_VO_DeInit();
++  virtual HI_S32 HIADP_Disp_Init(HI_UNF_ENC_FMT_E enFormat);
++  virtual HI_S32 HIADP_Disp_DeInit();
++  virtual HI_S32 HIADP_AVPlay_SetVdecAttr(HI_HANDLE hAvplay,HI_UNF_VCODEC_TYPE_E enType,HI_UNF_VCODEC_MODE_E enMode);
++};
++#endif
++
++
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.cpp kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.cpp
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.cpp	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.cpp	2016-03-24 08:13:15.811237419 +0100
+@@ -0,0 +1,152 @@
++
++#include "DVDVideoCodecHisi.h"
++#include "HisiVideoCodec.h"
++#include "DVDClock.h"
++#include "utils/log.h"
++
++#define __MODULE_NAME__ "DVDVideoCodecHisi"
++
++
++CDVDVideoCodecHisi::CDVDVideoCodecHisi() :
++  m_Codec(NULL),
++  m_pFormatName("HisiVideo")
++{
++  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::CDVDVideoCodecHisi - TODO");
++
++}
++
++CDVDVideoCodecHisi::~CDVDVideoCodecHisi()
++{
++  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::~CDVDVideoCodecHisi - TODO");
++  Dispose();
++}
++
++bool CDVDVideoCodecHisi::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
++{
++//  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::Open - TODO");
++
++  switch (hints.codec)
++  {
++  case AV_CODEC_ID_MPEG1VIDEO: //1
++  case AV_CODEC_ID_MPEG2VIDEO: //2
++  case AV_CODEC_ID_MPEG2VIDEO_XVMC: //3
++    m_pFormatName = "hisi-mpeg2";
++    break;
++  case AV_CODEC_ID_H263: //5
++  case AV_CODEC_ID_H263P: //20
++  case AV_CODEC_ID_H263I: //21
++	m_pFormatName = "hisi-h263";
++	break;
++  case AV_CODEC_ID_RV10: //6
++  case AV_CODEC_ID_RV20: //7
++  case AV_CODEC_ID_RV30: //70 = 0x46u?
++  case AV_CODEC_ID_RV40: //71 = 0x47u?
++	m_pFormatName = "hisi-rv";
++    break;
++  case AV_CODEC_ID_MPEG4: //13
++  case AV_CODEC_ID_MSMPEG4V2: //16
++  case AV_CODEC_ID_MSMPEG4V3: //17
++	m_pFormatName = "hisi-mpeg4";
++    break;
++  case AV_CODEC_ID_FLV1: //22 = 0x16u
++	m_pFormatName = "hisi-flv1";
++    break;
++  case AV_CODEC_ID_H264: //28 = 0x1Cu
++    m_pFormatName = "hisi-h264";
++    break;
++  case AV_CODEC_ID_VC1: //0x48u
++    m_pFormatName = "hisi-vc1";
++    break;
++  case AV_CODEC_ID_WMV3: //0x49u
++    m_pFormatName = "hisi-wmv3";
++    break;
++
++  default:
++    CLog::Log(LOGERROR, "Codec not supported codec = 0x%x", hints.codec);
++    return false;
++  }
++
++  m_hints = hints;
++
++  m_Codec = new CHisiVideoCodec();
++  if (!m_Codec)
++  {
++    CLog::Log(LOGERROR, "%s: Failed to create Hisi VideoCodec", __MODULE_NAME__);
++    return false;
++  }
++
++  m_opened = false;
++
++  memset(&m_videobuffer, 0, sizeof(DVDVideoPicture));
++
++  m_videobuffer.color_range  = 0;
++  m_videobuffer.color_matrix = 4;
++  m_videobuffer.dts/*24*/ = DVD_NOPTS_VALUE;
++  m_videobuffer.pts/*16*/ = DVD_NOPTS_VALUE;
++  m_videobuffer.format/*140*/ = RENDER_FMT_OMXEGL; //spitzbube: TODO
++  m_videobuffer.iFlags/*64*/  = DVP_FLAG_ALLOCATED;
++  m_videobuffer.iWidth/*124*/  = hints.width;
++  m_videobuffer.iHeight/*128*/ = hints.height;
++  m_videobuffer.iDisplayWidth/*132*/  = m_videobuffer.iWidth;
++  m_videobuffer.iDisplayHeight/*136*/ = m_videobuffer.iHeight;
++
++  /*
++   * TODO
++   */
++
++  if (!m_opened)
++  {
++    if (m_Codec && !m_Codec->OpenDecoder(m_hints))
++      CLog::Log(LOGERROR, "%s: Failed to open Hisi Video Codec", __MODULE_NAME__);
++    m_opened = true;
++  }
++
++  CLog::Log(LOGINFO, "%s: Opened Hisi VideoCodec", __MODULE_NAME__);
++
++  return true;
++}
++
++void CDVDVideoCodecHisi::Dispose()
++{
++//  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::Dispose - TODO");
++
++  if (m_Codec)
++    m_Codec->CloseDecoder(), delete m_Codec, m_Codec = NULL;
++
++  if (m_videobuffer.iFlags)
++    m_videobuffer.iFlags = 0;
++
++  /*
++   * TODO
++   */
++}
++
++void CDVDVideoCodecHisi::Reset()
++{
++//  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::Reset");
++  m_Codec->Reset();
++}
++
++int CDVDVideoCodecHisi::Decode(uint8_t* pData, int iSize, double dts, double pts)
++{
++//  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::Decode");
++  return m_Codec->Decode(pData, iSize, dts, pts);
++}
++
++bool CDVDVideoCodecHisi::GetPicture(DVDVideoPicture* pDvdVideoPicture)
++{
++  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::GetPicture - TODO");
++  return false;
++}
++
++const char* CDVDVideoCodecHisi::GetName()
++{
++  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::GetName - return '%s'", m_pFormatName);
++  return m_pFormatName;
++}
++
++void CDVDVideoCodecHisi::SetDropState(bool bDrop)
++{
++  CLog::Log(LOGDEBUG, "CDVDVideoCodecHisi::SetDropState - TODO");
++}
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.h kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.h
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.h	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecHisi.h	2016-03-24 07:53:52.851252747 +0100
+@@ -0,0 +1,35 @@
++
++#pragma once
++
++#include "DVDVideoCodec.h"
++#include "DVDStreamInfo.h"
++
++
++class CHisiVideoCodec;
++
++
++class CDVDVideoCodecHisi : public CDVDVideoCodec
++{
++public:
++
++  CDVDVideoCodecHisi();
++  virtual ~CDVDVideoCodecHisi();
++
++  virtual bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options);
++  virtual void Dispose();
++  virtual int Decode(uint8_t* pData, int iSize, double dts, double pts);
++  virtual void Reset();
++  virtual bool GetPicture(DVDVideoPicture* pDvdVideoPicture);
++  virtual const char* GetName();
++  virtual void SetDropState(bool bDrop);
++
++protected:
++
++  CHisiVideoCodec *m_Codec; //4
++  const char     *m_pFormatName; //8
++  DVDVideoPicture m_videobuffer; //16
++  bool            m_opened; //144
++  CDVDStreamInfo  m_hints; //148
++
++};
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.cpp kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.cpp
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.cpp	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.cpp	2016-03-26 20:10:01.978488401 +0100
+@@ -0,0 +1,958 @@
++
++#include "HisiVideoCodec.h"
++#include "DllLibHiComm.h"
++#include "DllLibHiMpi.h"
++#include "DllLibHiSample.h"
++#include "utils/log.h"
++#include "cores/VideoRenderers/RenderManager.h"
++
++
++HI_HANDLE CHisiVideoCodec::g_m_hAvplay = 0;
++
++
++// same as AV_NOPTS_VALUE
++#define INT64_0         INT64_C(0x8000000000000000)
++
++
++typedef enum {
++    VFORMAT_UNKNOWN = -1,
++    VFORMAT_MPEG12 = 0,
++    VFORMAT_MPEG4, //1
++    VFORMAT_H264, //2
++    VFORMAT_MJPEG, //3
++    VFORMAT_REAL, //4
++    VFORMAT_JPEG,
++    VFORMAT_VC1, //6
++    VFORMAT_AVS,
++    VFORMAT_SW,
++    VFORMAT_H264MVC,
++    VFORMAT_UNSUPPORT, //10
++    VFORMAT_MAX
++} vformat_t;
++
++
++typedef enum {
++    AM_STREAM_UNKNOWN = 0,
++    AM_STREAM_TS,
++    AM_STREAM_PS,
++    AM_STREAM_ES, //3
++    AM_STREAM_RM,
++    AM_STREAM_AUDIO,
++    AM_STREAM_VIDEO,
++} pstream_type;
++
++
++typedef struct hdr_buf {
++    char *data;
++    int size;
++} hdr_buf_t;
++
++
++struct Struct_188
++{
++  struct Inner_0
++  {
++    int fill_0[18]; //0
++	//72
++  } Data_0; //0
++
++  int64_t avpts; //72
++  int64_t avdts; //80
++  int avduration; //88
++  int isvalid; //92
++  int newflag; //96
++//  int fill_100; //100
++  int64_t lastpts; //104
++  int Data_112; //112
++  void* pData_116; //116
++  int Data_120; //120
++  int Data_124; //124
++  hdr_buf_t* hdr; //128
++  void* codec; //132 //132 = &Data_136
++  int Data_136; //136
++  int fill_140[22]; //140
++  int Data_228; //228
++  int fill_232[24]; //232
++  int Data_328; //328
++  int Data_332; //332
++  int fill_336[1010]; //336
++  pstream_type stream_type; //4376
++  int fill_4380[7]; //4380
++  int check_first_pts; //4408
++  int video_format; //4412
++  int fill_4416; //4416
++  int Data_4420; //4420
++  int Data_4424; //4424
++  int fill_4428; //4428
++  int Data_4432; //4432
++  int Data_4436; //4436
++  int fill_4440[2]; //4440
++  int video_rate; //4448
++  int Data_4452; //4452
++  int fill_4456[2]; //4456
++  int extrasize; //4464
++  uint8_t* extradata; //4468
++  DllLibHiSample* Data_4472; //4472
++  DllLibHiComm* Data_4476; //4476
++  DllLibHiMpi* Data_4480; //4480
++  HI_HANDLE Data_4484; //4484
++  HI_HANDLE Data_4488; //4488
++  char bData_4492; //4492
++  //0x1190 = 4496
++};
++
++
++void /*write_av_packet*/sub_6B2388(/*am_private_t*/Struct_188* r5/*para*/, /*am_packet_t*/Struct_188* fp/*pkt*/)
++{
++  HI_S32 s32Res;
++  HI_UNF_STREAM_BUF_S sp32;
++
++  if (fp->newflag/*96*/)
++  {
++    //6b23a4
++	if (fp->isvalid/*92*/)
++	{
++	  //6b23b0 -> check_in_pts
++	  int last_duration = 0;
++	  static int last_v_duration = 0; //1AE13CC
++	  int64_t pts = 0;
++
++	  last_duration = last_v_duration;
++
++	  if (r5->stream_type/*4376*/ == AM_STREAM_ES/*3*/)
++	  {
++		  //->6b2a1c
++		  if ((int64_t)INT64_0 != fp->avpts/*72*/)
++		  {
++			//6b2a30
++			pts = fp->avpts;
++		  }
++		  else /*6b2a60*/if ((int64_t)INT64_0 != fp->avdts/*80*/)
++		  {
++			//6b2a70
++			pts = fp->avdts * last_duration;
++			last_v_duration = fp->avduration ? fp->avduration/*88*/ : 1;
++		  }
++		  else
++		  {
++			//6b2a90
++			pts = 0;
++		  }
++		  //6b2a40
++		  if (!r5->check_first_pts/*4408*/)
++		  {
++			r5->check_first_pts = 1;
++		  }
++	  } //if (r5->stream_type/*4376*/ == AM_STREAM_ES/*3*/)
++
++      if (pts > 0)
++        fp->lastpts/*104*/ = pts;
++	} //if (fp->isvalid)
++	//6b23cc
++	if (fp->hdr/*128*/ && (fp->hdr->size > 0))
++	{
++		//6b23e4
++		if ((fp->codec/*132*/ == NULL) || (fp->hdr->data == NULL))
++		{
++		  //->6b2a9c
++	      CLog::Log(LOGERROR, "[write_header]codec null!");
++	      //->6b24bc
++		}
++		else
++		{
++			//6b23fc
++			s32Res = r5->Data_4480->HI_UNF_AVPLAY_GetBuf(r5->Data_4484, //hAvplay,
++					HI_UNF_AVPLAY_BUF_ID_ES_VID, //enBufId,
++					fp->hdr->size, //u32ReqLen,
++					&sp32, //pstData,
++					0); //u32TimeOutMs);
++			if (s32Res != HI_SUCCESS)
++			{
++			  //->6b2534
++			  CLog::Log(LOGERROR, "write_header 5, Ret 0x%x", s32Res);
++			  //->6b24bc
++			}
++			else
++			{
++			  //6b2434
++			  memcpy(sp32.pu8Data, fp->hdr->data, fp->hdr->size);
++			  //6b2444
++			  s32Res = r5->Data_4480->HI_UNF_AVPLAY_PutBuf(r5->Data_4484, //HI_HANDLE hAvplay,
++						HI_UNF_AVPLAY_BUF_ID_ES_VID, //HI_UNF_AVPLAY_BUFID_E enBufId,
++						fp->hdr->size, //HI_U32 u32ValidDataLen,
++#if 0 //spitzbube: TODO
++						HI_U32 u32PtsMs);
++#else
++						0);
++#endif
++			  if (s32Res != HI_SUCCESS)
++			  {
++				//6b24ac
++				CLog::Log(LOGERROR, "write_header 4, Ret 0x%x", s32Res);
++			  }
++			}
++		}
++	} //if (fp->hdr && (fp->hdr->size > 0))
++	//6b24bc
++    fp->newflag/*96*/ = 0;
++  } //if (fp->newflag)
++  //6b24c4
++
++  /*
++   * TODO
++   */
++}
++
++
++CHisiVideoCodec::CHisiVideoCodec() : CThread("CHisiVideoCodec")
++{
++//  CLog::Log(LOGDEBUG, "CHisiVideoCodec::CHisiVideoCodec - TODO");
++
++  m_bData_236 = 0;
++  m_bData_237 = 0;
++  m_Data_240 = 0;
++
++  m_pData_188 = new Struct_188;
++  memset(m_pData_188, 0, sizeof(Struct_188));
++
++  m_dllHiSample/*176*/ = new DllLibHiSample;
++  m_dllHiComm/*180*/ = new DllLibHiComm;
++  m_dllbHiMpi/*184*/ = new DllLibHiMpi;
++
++  m_dllHiSample->Load(); //(*(void (**)(void))(v17 + 8))();
++  m_dllHiComm->Load(); //(*(void (**)(void))(**(_DWORD **)(v1 + 180) + 8))();
++  m_dllbHiMpi->Load(); //(*(void (**)(void))(**(_DWORD **)(v1 + 184) + 8))();
++  //6b2ee8
++  m_pData_188->Data_4472 = m_dllHiSample;
++  m_pData_188->Data_4476 = m_dllHiComm;
++  m_pData_188->Data_4480 = m_dllbHiMpi;
++
++  m_pData_188->Data_4484 = m_hAvPlay;
++  m_pData_188->Data_4488 = m_hWindow;
++}
++
++
++CHisiVideoCodec::~CHisiVideoCodec()
++{
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::~CHisiVideoCodec - TODO");
++
++  StopThread();
++
++  delete m_dllHiSample, m_dllHiSample = NULL;
++  delete m_dllHiComm, m_dllHiComm = NULL;
++  delete m_dllbHiMpi, m_dllbHiMpi = NULL;
++}
++
++static vformat_t codecid_to_vformat(enum AVCodecID id)
++{
++  vformat_t format;
++  switch (id)
++  {
++    case AV_CODEC_ID_MPEG1VIDEO: //1
++    case AV_CODEC_ID_MPEG2VIDEO: //2
++    case AV_CODEC_ID_MPEG2VIDEO_XVMC: //3
++      format = VFORMAT_MPEG12; //0
++      break;
++    case AV_CODEC_ID_H263: //5
++    case AV_CODEC_ID_MPEG4:
++    case AV_CODEC_ID_H263P:
++    case AV_CODEC_ID_H263I:
++    case AV_CODEC_ID_MSMPEG4V2:
++    case AV_CODEC_ID_MSMPEG4V3:
++    case AV_CODEC_ID_FLV1:
++      format = VFORMAT_MPEG4; //1
++      break;
++    case AV_CODEC_ID_RV10:
++    case AV_CODEC_ID_RV20:
++    case AV_CODEC_ID_RV30:
++    case AV_CODEC_ID_RV40:
++      format = VFORMAT_REAL; //4
++      break;
++    case AV_CODEC_ID_H264:
++      format = VFORMAT_H264;
++      break;
++    /*
++    case AV_CODEC_ID_H264MVC:
++      // H264 Multiview Video Coding (3d blurays)
++      format = VFORMAT_H264MVC;
++      break;
++    */
++    case AV_CODEC_ID_MJPEG:
++      format = VFORMAT_MJPEG;
++      break;
++    case AV_CODEC_ID_VC1:
++    case AV_CODEC_ID_WMV3:
++      format = VFORMAT_VC1;
++      break;
++    case AV_CODEC_ID_AVS:
++    case AV_CODEC_ID_CAVS:
++      format = VFORMAT_AVS;
++      break;
++#if 0
++    case AV_CODEC_ID_HEVC:
++      format = VFORMAT_HEVC;
++      break;
++#endif
++    default:
++      format = VFORMAT_UNSUPPORT;
++      break;
++  }
++
++  CLog::Log(LOGDEBUG, "codecid_to_vformat, id(%d) -> vformat(%d)", (int)id, format);
++  return format;
++}
++
++bool CHisiVideoCodec::OpenDecoder(CDVDStreamInfo &hints)
++{
++  HI_S32 s32Res;
++  HI_UNF_ENC_FMT_E sl = HI_UNF_ENC_FMT_1080P_60; //TODO: spitzbube
++  HI_BOOL v32;
++  int v31;
++
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::OpenDecoder - TODO");
++
++  /*
++   * TODO
++   */
++
++#if 0
++  CLog::Log(LOGDEBUG, "hi_get_disp1_res-(%s)", v166);
++  CLog::Log(LOGDEBUG, "hi_get_disp1_res-(%d)", v21);
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::OpenDecoder(format:%d, w:%d, h:%d, fr:%d)",
++		  v21, v151, v152);
++#endif
++
++  m_VdecType/*81*/ = HI_UNF_VCODEC_TYPE_MSMPEG4V1/*17*/;
++
++  switch (hints.codec)
++  {
++  case AV_CODEC_ID_MPEG1VIDEO: //1
++  case AV_CODEC_ID_MPEG2VIDEO: //2
++  case AV_CODEC_ID_MPEG2VIDEO_XVMC: //3
++	m_VdecType = HI_UNF_VCODEC_TYPE_MPEG2/*0*/; //v33 = 0; *((_DWORD *)v2 + 81) = 0;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++  case AV_CODEC_ID_H263: //5
++  case AV_CODEC_ID_H263P: //20
++  case AV_CODEC_ID_H263I: //21
++	m_VdecType = HI_UNF_VCODEC_TYPE_H263/*3*/; //v33 = (const char *)3; *((_DWORD *)v2 + 81) = 3;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++	break;
++  case AV_CODEC_ID_RV10: //6
++  case AV_CODEC_ID_RV20: //7
++  case AV_CODEC_ID_RV30: //70 = 0x46u?
++  case AV_CODEC_ID_RV40: //71 = 0x47u?
++	m_VdecType = HI_UNF_VCODEC_TYPE_REAL9/*6*/; //v33 = (const char *)6; *((_DWORD *)v2 + 81) = 6;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++  case AV_CODEC_ID_MPEG4: //13
++  case AV_CODEC_ID_MSMPEG4V2: //16
++  case AV_CODEC_ID_MSMPEG4V3: //17
++	m_VdecType = HI_UNF_VCODEC_TYPE_MPEG4/*1*/; //v33 = (const char *)1; *((_DWORD *)v2 + 81) = 1;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++  case AV_CODEC_ID_FLV1: //22 = 0x16u
++  case AV_CODEC_ID_WMV3: //0x49u
++	m_VdecType = HI_UNF_VCODEC_TYPE_VC1/*7*/; //v33 = (const char *)7; *((_DWORD *)v2 + 81) = 7;
++    v32 = HI_FALSE/*0*/;
++    v31 = 5;
++    break;
++  case AV_CODEC_ID_H264: //28 = 0x1Cu
++	m_VdecType = HI_UNF_VCODEC_TYPE_H264/*4*/; //v33 = (const char *)4; *((_DWORD *)v2 + 81) = 4;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++  case AV_CODEC_ID_VC1: //0x48u
++	m_VdecType = HI_UNF_VCODEC_TYPE_VC1/*7*/; //v33 = (const char *)7; *((_DWORD *)v2 + 81) = 7;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++  case AV_CODEC_ID_VP6: //0x5Du:
++	m_VdecType = HI_UNF_VCODEC_TYPE_VP6/*8*/; //v33 = (const char *)8; *((_DWORD *)v2 + 81) = 8;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++  case AV_CODEC_ID_VP6F: //0x5Eu:
++	m_VdecType = HI_UNF_VCODEC_TYPE_VP6F/*9*/; //v33 = (const char *)9; *((_DWORD *)v2 + 81) = 9;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++  case AV_CODEC_ID_VP8: //0x91u:
++	m_VdecType = HI_UNF_VCODEC_TYPE_VP8/*16*/; //v33 = (const char *)16; *((_DWORD *)v2 + 81) = 16;
++    v32 = HI_TRUE/*1*/;
++    v31 = 8;
++    break;
++
++  default:
++    CLog::Log(LOGERROR, "Codec not supported codec = 0x%x", hints.codec);
++    return false;
++  }
++
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::OpenDecoder : m_VdecType(%d)", m_VdecType/*v33*/);
++
++  m_dllHiComm->HI_SYS_Init(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 28))();
++  m_dllHiComm->HI_SYS_PreAV(NULL); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 36))();
++
++  s32Res = m_dllbHiMpi->HI_UNF_AVPLAY_Init(); //(const char *)(*(int (**)(void))(**((_DWORD **)v2 + 46) + 28))();
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b6074
++    CLog::Log(LOGERROR, "call HI_UNF_AVPLAY_Init failed. ret=0x%x", s32Res);
++    //6b6084
++    m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++    //6b6098
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b61ec
++  HI_UNF_AVPLAY_ATTR_S sp684;
++
++  s32Res = m_dllbHiMpi->HI_UNF_AVPLAY_GetDefaultConfig(&sp684, HI_UNF_AVPLAY_STREAM_TYPE_ES); //v41 = (*(int (**)(void))(**((_DWORD **)v2 + 46) + 36))();
++  s32Res |= m_dllbHiMpi->HI_UNF_AVPLAY_Create(&sp684, &m_hAvPlay);
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b6228
++    CLog::Log(LOGERROR, "call HI_UNF_AVPLAY_Create failed. ret=0x%x", s32Res);
++    //6b6238
++    m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++    //->6b6084
++    m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b624c
++  g_m_hAvplay = m_hAvPlay;
++
++  int sp784;
++
++  s32Res = m_dllbHiMpi->HI_UNF_AVPLAY_GetAttr(m_hAvPlay,
++		  	  HI_UNF_AVPLAY_ATTR_ID_AFD, &sp784); //v44 = (*(int (**)(void))(v43 + 52))();
++  sp784 = 0;
++  s32Res |= m_dllbHiMpi->HI_UNF_AVPLAY_SetAttr(m_hAvPlay,
++	  	  	  HI_UNF_AVPLAY_ATTR_ID_AFD, &sp784); //v47 = (const char *)((*(int (**)(void))(*(_DWORD *)v45 + 48))() | v44);
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b62a8
++	CLog::Log(LOGERROR, "call HI_UNF_AVPLAY_SetAttr failed. ret=0x%x", s32Res);
++	//->6b6238
++    m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++    //->6b6084
++    m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    //6b60a8
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    //6b60b8
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b62c8
++  s32Res = m_dllHiSample->HIADP_Disp_Init(sl); //v48 = (const char *)(*(int (**)(void))(**((_DWORD **)v2 + 44) + 48))();
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b62e4
++    CLog::Log(LOGERROR, "call DispInit failed. ret=0x%x", s32Res);
++    //->6b60b8
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b6304
++  m_dllbHiMpi->HI_UNF_DISP_SetLayerZorder(HI_UNF_DISPLAY1, HI_UNF_DISP_LAYER_VIDEO, HI_LAYER_ZORDER_MOVEBOTTOM); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 156))();
++  m_dllbHiMpi->HI_UNF_DISP_SetLayerZorder(HI_UNF_DISPLAY1, HI_UNF_DISP_LAYER_GFX, HI_LAYER_ZORDER_MOVETOP); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 156))();
++
++  s32Res = m_dllbHiMpi->HI_UNF_VO_Init(HI_UNF_VO_DEV_MODE_MOSAIC);
++  if (s32Res != HI_SUCCESS)
++  {
++    //->6b6384
++    CLog::Log(LOGERROR, "call VO_Init failed. ret=0x%x", s32Res);
++    //->6b60a8
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    //6b60b8
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b6354
++  s32Res = m_dllbHiMpi->HI_UNF_VO_Open(1); //(const char *)(*(int (**)(void))(**((_DWORD **)v2 + 46) + 132))();
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b6370
++    CLog::Log(LOGERROR, "call VO_Open failed. ret=0x%x", s32Res);
++    //->6b60a8
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    //6b60b8
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b6398
++  HI_UNF_WINDOW_ATTR_S sp548;
++#if 1 //Spitzbube: TODO
++  memset(&sp548, 0, sizeof(sp548));
++  sp548.enDisp   = HI_UNF_DISPLAY1; //s_stParam.u32Display;
++  sp548.bVirtual = HI_FALSE;
++  sp548.stWinAspectAttr.enAspectCvrs        = HI_UNF_VO_ASPECT_CVRS_LETTERBOX;//HI_UNF_VO_ASPECT_CVRS_IGNORE;//HI_UNF_VO_ASPECT_CVRS_LETTERBOX
++  sp548.stWinAspectAttr.bUserDefAspectRatio = HI_FALSE;
++  sp548.bUseCropRect      = HI_FALSE;
++  sp548.stInputRect.s32X  = 0;
++  sp548.stInputRect.s32Y  = 0;
++  sp548.stInputRect.s32Width  = 0;
++  sp548.stInputRect.s32Height = 0;
++  sp548.stOutputRect.s32X = 0; //s_stParam.x;
++  sp548.stOutputRect.s32Y = 0; //s_stParam.y;
++  sp548.stOutputRect.s32Width  = 0; //s_stParam.w;
++  sp548.stOutputRect.s32Height = 0; //s_stParam.h;
++#endif
++
++  s32Res = m_dllbHiMpi->HI_UNF_VO_CreateWindow(&sp548, &m_hWindow); //(const char *)(*(int (__fastcall **)(int, int *, char *))(*(_DWORD *)v51 + 136))(v51, &v132, (char *)v2 + 332);
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b63cc
++    CLog::Log(LOGERROR, "call VO_CreatWin failed. ret=0x%x", s32Res);
++    //->6b6098
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b641c
++  s32Res = m_dllbHiMpi->HI_UNF_AVPLAY_ChnOpen(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID, NULL); //(const char *)(*(int (**)(void))(**((_DWORD **)v2 + 46) + 64))();
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b643c
++    CLog::Log(LOGERROR, "call HI_UNF_AVPLAY_ChnOpen failed. ret=0x%x", s32Res);
++    //6b644c
++    m_dllbHiMpi->HI_UNF_AVPLAY_Destroy(m_hAvPlay); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 44))();
++    //->6b6238
++    m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++    //->6b6084
++    m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b6464
++  HI_UNF_VCODEC_ATTR_S sp736;
++
++  s32Res = m_dllbHiMpi->HI_UNF_AVPLAY_GetAttr(m_hAvPlay, HI_UNF_AVPLAY_ATTR_ID_VDEC, &sp736); //v59 = (*(int (**)(void))(**((_DWORD **)v2 + 46) + 52))();
++  //6b6480
++  //756 = 20
++  sp736.enMode = HI_UNF_VCODEC_MODE_NORMAL/*0*/; //760 = 24
++  sp736.u32ErrCover = 100; //764 = 28
++  if (HI_UNF_VCODEC_TYPE_VC1 == m_VdecType)
++  {
++      sp736.unExtAttr.stVC1Attr.bAdvancedProfile = v32/*bAdvancedProfil*/; //740 = 4
++      sp736.unExtAttr.stVC1Attr.u32CodecVersion = v31/*u32CodecVersion*/; //744 = 8
++  }
++
++  if (HI_UNF_VCODEC_TYPE_VP6 == m_VdecType)
++  {
++      sp736.unExtAttr.stVP6Attr.bReversed = HI_FALSE/*0*/; //740 = 4
++  }
++//  sp736.enType = VdecType;
++
++  s32Res |= m_dllbHiMpi->HI_UNF_AVPLAY_SetAttr(m_hAvPlay, HI_UNF_AVPLAY_ATTR_ID_VDEC, &sp736); //(const char *)((*(int (**)(void))(**((_DWORD **)v2 + 46) + 48))() | v59);
++  if (s32Res != HI_SUCCESS)
++  {
++	//6b64d8
++    CLog::Log(LOGERROR, "call HI_UNF_AVPLAY_SetAttr failed. ret=0x%x", s32Res);
++    //->6b6238
++    m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++    //->6b6084
++    m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b64ec
++  s32Res = m_dllbHiMpi->HI_UNF_VO_AttachWindow(m_hWindow, m_hAvPlay); //(const char *)(*(int (**)(void))(**((_DWORD **)v2 + 46) + 144))();
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b650c
++    CLog::Log(LOGERROR, "call HI_UNF_VO_AttachWindow failed. ret=0x%x", s32Res);
++    //6b651c
++    m_dllbHiMpi->HI_UNF_AVPLAY_ChnClose(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 68))();
++    //->6b644c
++    m_dllbHiMpi->HI_UNF_AVPLAY_Destroy(m_hAvPlay); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 44))();
++    //->6b6238
++    m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++    //->6b6084
++    m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b6538
++  s32Res = m_dllbHiMpi->HI_UNF_VO_SetWindowEnable(m_hWindow, HI_TRUE); //(const char *)(*(int (**)(void))(**((_DWORD **)v2 + 46) + 152))();
++  if (s32Res != HI_SUCCESS)
++  {
++	//6b6558
++	CLog::Log(LOGERROR, "call HI_UNF_VO_SetWindowEnable failed. ret=0x%x", s32Res);
++	//6b656c
++	m_dllbHiMpi->HI_UNF_VO_SetWindowEnable(m_hWindow, HI_FALSE);
++	m_dllbHiMpi->HI_UNF_VO_DetachWindow(m_hWindow, m_hAvPlay);
++	//->6b651c
++    m_dllbHiMpi->HI_UNF_AVPLAY_ChnClose(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 68))();
++    //->6b644c
++    m_dllbHiMpi->HI_UNF_AVPLAY_Destroy(m_hAvPlay); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 44))();
++    //->6b6238
++    m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++    //->6b6084
++    m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++    m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++    m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++    m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++    g_m_hAvplay = 0;
++
++    return false;
++  }
++  //6b66d4
++  s32Res = m_dllHiSample->HIADP_AVPlay_SetVdecAttr(m_hAvPlay, m_VdecType, HI_UNF_VCODEC_MODE_NORMAL); //(const char *)(*(int (**)(void))(**((_DWORD **)v2 + 44) + 64))();
++  if (s32Res != HI_SUCCESS)
++  {
++    //6b66f4
++	CLog::Log(LOGERROR, "call HIADP_AVPlay_SetVdecAttr failed. ret=0x%x", s32Res);
++    //->6b656c
++	m_dllbHiMpi->HI_UNF_VO_SetWindowEnable(m_hWindow, HI_FALSE);
++	m_dllbHiMpi->HI_UNF_VO_DetachWindow(m_hWindow, m_hAvPlay);
++	//->6b651c
++	m_dllbHiMpi->HI_UNF_AVPLAY_ChnClose(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 68))();
++	//->6b644c
++	m_dllbHiMpi->HI_UNF_AVPLAY_Destroy(m_hAvPlay); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 44))();
++	//->6b6238
++	m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++	//->6b6084
++	m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++	m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++	m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++	m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++	g_m_hAvplay = 0;
++
++	return false;
++  }
++  //6b670c
++  s32Res = m_dllbHiMpi->HI_UNF_AVPLAY_Start(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID, NULL); //(const char *)(*(int (**)(void))(**((_DWORD **)v2 + 46) + 72))();
++  if (s32Res != HI_SUCCESS)
++  {
++	//6b672c
++	CLog::Log(LOGERROR, "call HI_UNF_AVPLAY_Start failed. ret=0x%x", s32Res);
++	//->6b656c
++	m_dllbHiMpi->HI_UNF_VO_SetWindowEnable(m_hWindow, HI_FALSE);
++	m_dllbHiMpi->HI_UNF_VO_DetachWindow(m_hWindow, m_hAvPlay);
++	//->6b651c
++	m_dllbHiMpi->HI_UNF_AVPLAY_ChnClose(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 68))();
++	//->6b644c
++	m_dllbHiMpi->HI_UNF_AVPLAY_Destroy(m_hAvPlay); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 44))();
++	//->6b6238
++	m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 32))();
++	//->6b6084
++	m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (**)(void))(**((_DWORD **)v2 + 46) + 140))();
++	m_dllHiSample->HIADP_VO_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 36))();
++	m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 44) + 52))();
++	m_dllHiComm->HI_SYS_DeInit(); //(*(void (**)(void))(**((_DWORD **)v2 + 45) + 32))();
++
++	g_m_hAvplay = 0;
++
++	return false;
++  }
++  //6b6808
++  m_bData_344 = 1;
++
++  m_dllbHiMpi->HI_UNF_VO_SetWindowEnable(m_hWindow, HI_FALSE); //(*(void (**)(void))(*(_DWORD *)v85 + 152))();
++
++  memset(&m_pData_188->Data_0, 0, sizeof(Struct_188::Inner_0));
++
++  m_pData_188->avduration/*88*/ = 0;
++  m_pData_188->isvalid/*92*/ = 0;
++  m_pData_188->newflag/*96*/ = 0;
++  m_pData_188->Data_112 = 0;
++  m_pData_188->pData_116 = 0;
++  m_pData_188->Data_120 = 0;
++  m_pData_188->Data_124 = 0;
++  m_pData_188->hdr/*128*/ = NULL;
++  m_pData_188->codec = NULL;
++  m_pData_188->avpts/*72*/ = 0;
++  m_pData_188->avdts/*80*/ = 0;
++  m_pData_188->lastpts/*104*/ = 0;
++  m_pData_188->stream_type/*4376*/ = AM_STREAM_ES/*3*/;
++#if 0 //spitzbube: TODO
++  m_pData_188->Data_4432 = 0; //hints.24;
++  m_pData_188->Data_4436 = 0; //hints.20;
++  m_pData_188->Data_4420 = 0; //hints.0;
++  m_pData_188->Data_4424 = 0; //hints.88;
++  if ((hints.16 > 0) && (hints.12 != 0))
++  {
++    //6b68d0
++  }
++  //6b6c90
++
++  CLog::Log(LOGERROR, "CHisiVideoCodec::OpenDecoder video_rate exception");
++
++#endif
++
++  //6b698c
++  m_pData_188->video_format = codecid_to_vformat(hints.codec);
++
++  switch (m_pData_188->video_format)
++  {
++    default:
++      //6b69ac
++      m_pData_188->extrasize = hints.extrasize/*84*/;
++      m_pData_188->extradata = (uint8_t*)malloc(hints.extrasize);
++      memcpy(m_pData_188->extradata, hints.extradata/*80*/, hints.extrasize);
++#if 1 //extradata debug
++      //6b69dc
++      {
++    	for (int i = 0; i < m_pData_188->extrasize; i += 8)
++    	{
++          uint8_t* p = &m_pData_188->extradata[i];
++    	  CLog::Log(LOGDEBUG, "extradata %02x %02x %02x %02x %02x %02x %02x %02x",
++    			  p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++    	}
++      }
++#endif
++      break;
++    case VFORMAT_REAL: //0
++    case VFORMAT_MPEG12: //4
++      break;
++  }
++  //6b6a58
++
++
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::OpenDecoder : video_format(%d)",
++		  m_pData_188->video_format);
++  //6b6adc
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::OpenDecoder hints.fpsrate(%d), hints.fpsscale(%d), video_rate(%d)",
++    hints.fpsrate, //*((const char **)v130 + 4),
++    hints.fpsscale, //*((_DWORD *)v130 + 3),
++    m_pData_188->video_rate); //*(_DWORD *)(*((_DWORD *)v2 + 47) + 4448));
++  //6b6b08
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::OpenDecoder hints.orientation(%d), hints.forced_aspect(%d)",
++    hints.orientation, //*((const char **)v130 + 12),
++    hints.forced_aspect); //*((_BYTE *)v130 + 45));
++
++
++
++  m_pData_188->Data_228 |= (m_pData_188->Data_4452 << 16);
++  m_pData_188->codec/*132*/ = &m_pData_188->Data_136;
++
++  m_pData_188->Data_4484 = m_hAvPlay;
++  m_pData_188->bData_4492 = 0;
++
++  //6b6cfc
++  Create();
++
++  g_renderManager.RegisterRenderUpdateCallBack((const void*)this, RenderUpdateCallBack);
++  //->6b60dc
++  return true;
++}
++
++
++void CHisiVideoCodec::CloseDecoder()
++{
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::CloseDecoder");
++
++  StopThread();
++
++  g_renderManager.RegisterRenderUpdateCallBack((const void*)NULL, NULL);
++
++  if (m_pData_188->pData_116)
++  {
++    free(m_pData_188->pData_116);
++    m_pData_188->pData_116 = NULL;
++  }
++
++  if (m_pData_188->hdr/*128*/)
++  {
++	free(m_pData_188->hdr->data);
++	m_pData_188->hdr->data = NULL;
++    free(m_pData_188->hdr);
++    m_pData_188->hdr = NULL;
++  }
++
++  m_pData_188->codec/*132*/ = NULL;
++
++  free(m_pData_188->extradata);
++  m_pData_188->extradata = NULL;
++
++  m_dllbHiMpi->HI_UNF_VO_SetWindowEnable(m_hWindow, HI_FALSE); //(*(void (**)(void))(v10 + 152))();
++
++  HI_UNF_AVPLAY_STOP_OPT_S sp;
++  sp.u32TimeoutMs = 0;
++  m_dllbHiMpi->HI_UNF_AVPLAY_Stop(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID, &sp);
++  m_dllbHiMpi->HI_UNF_VO_SetWindowEnable(m_hWindow, HI_FALSE); //(*(void (__cdecl **)(_DWORD, _DWORD))(**((_DWORD **)v3 + 46) + 152))
++  m_dllbHiMpi->HI_UNF_VO_DetachWindow(m_hWindow, m_hAvPlay); //(*(void (__cdecl **)(_DWORD, _DWORD))(**((_DWORD **)v3 + 46) + 148))
++  m_dllbHiMpi->HI_UNF_AVPLAY_ChnClose(m_hAvPlay, HI_UNF_AVPLAY_MEDIA_CHAN_VID); //(*(void (__cdecl **)(_DWORD, _DWORD))(**((_DWORD **)v3 + 46) + 68))
++  m_dllbHiMpi->HI_UNF_AVPLAY_Destroy(m_hAvPlay); //(*(void (__cdecl **)(_DWORD, _DWORD))(**((_DWORD **)v3 + 46) + 44))
++  m_dllbHiMpi->HI_UNF_AVPLAY_DeInit(); //(*(void (__cdecl **)(_DWORD, int))(**((_DWORD **)v3 + 46) + 32))
++  m_dllbHiMpi->HI_UNF_VO_DestroyWindow(m_hWindow); //(*(void (__cdecl **)(_DWORD, _DWORD))(**((_DWORD **)v3 + 46) + 140))
++  m_dllHiSample->HIADP_VO_DeInit(); //(*(void (__cdecl **)(_DWORD, int))(**((_DWORD **)v3 + 44) + 36))
++  m_dllHiSample->HIADP_Disp_DeInit(); //(*(void (__cdecl **)(_DWORD, int))(**((_DWORD **)v3 + 44) + 52))
++  m_dllHiComm->HI_SYS_DeInit(); //(*(void (__cdecl **)(_DWORD, int))(**((_DWORD **)v3 + 45) + 32))
++
++#if 0
++  m_dllHiSample->Unload(); //(*(void (__cdecl **)(_DWORD, int))(**((_DWORD **)v3 + 44) + 12))
++  m_dllHiComm->Unload(); //(*(void (__cdecl **)(_DWORD, int))(**((_DWORD **)v3 + 45) + 12))
++  m_dllbHiMpi->Unload(); //(*(int (__cdecl **)(_DWORD, int))(**((_DWORD **)v3 + 46) + 12))
++
++  m_dllHiSample = NULL;
++  m_dllHiComm = NULL;
++  m_dllbHiMpi = NULL;
++#endif
++
++  m_pData_188->Data_4472 = 0;
++  m_pData_188->Data_4476 = 0;
++  m_pData_188->Data_4480 = 0;
++
++  m_pData_188->Data_4484 = 0;
++  m_pData_188->Data_4488 = 0;
++
++  m_pData_188->Data_328 = 0;
++  m_pData_188->Data_332 = 0;
++
++  g_m_hAvplay = 0;
++}
++
++
++int CHisiVideoCodec::Decode(uint8_t* pData, int iSize, double dts, double pts)
++{
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::Decode - TODO");
++
++  // grr, m_RenderUpdateCallBackFn in g_renderManager is NULL'ed during
++  // g_renderManager.Configure call by player, which happens after the codec
++  // OpenDecoder call. So we need to restore it but it does not seem to stick :)
++  g_renderManager.RegisterRenderUpdateCallBack((const void*)this, RenderUpdateCallBack);
++  //6b3600
++  if (m_pData_188->video_format == VFORMAT_VC1/*6*/)
++  {
++    //6b38dc
++  }
++  else
++  {
++    //6b3614
++  }
++
++  return 0;
++}
++
++
++void CHisiVideoCodec::Reset()
++{
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::Reset - TODO");
++
++}
++
++
++void CHisiVideoCodec::Process()
++{
++  HI_S32 s32Res;
++
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::Process Started");
++
++  SetPriority(THREAD_PRIORITY_ABOVE_NORMAL);
++
++  while (!m_bStop)
++  {
++    //6b5390
++	if (m_pData_188->lastpts/*104*/ > 0)
++	{
++	  //6b53a4
++
++		  /*
++		   * TODO
++		   */
++
++		//6b53e4
++		HI_UNF_AVPLAY_STATUS_INFO_S sp4;
++
++		s32Res = m_dllbHiMpi->HI_UNF_AVPLAY_GetStatusInfo(m_hAvPlay, &sp4); //(*(int (**)(void))(**((_DWORD **)_R4 + 46) + 96))()
++		if (s32Res != HI_SUCCESS)
++		{
++		  //6b54ac
++		  CLog::Log(LOGERROR, "CHisiVideoCodec::Process: no pts_video(%f)", m_fData_200);
++		  /*
++		   * TODO
++		   */
++		  //->6b5410
++		}
++		else
++		{
++		  //6b5404
++		  sp4.stSyncStatus.u32LastVidPts;
++		}
++	}
++	else
++	{
++	  //6b549c
++      Sleep(10);
++	}
++  } //while (!m_bStop)
++  //6b5474
++  SetPriority(THREAD_PRIORITY_NORMAL);
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::Process Stopped");
++}
++
++void CHisiVideoCodec::SetVideoRect(const CRect &SrcRect, const CRect &DestRect)
++{
++  // this routine gets called every video frame
++  // and is in the context of the renderer thread so
++  // do not do anything stupid here.
++
++  CLog::Log(LOGDEBUG, "CHisiVideoCodec::SetVideoRect");
++
++  //6b559c
++  /*
++   * TODO
++   */
++}
++
++/* static */
++void CHisiVideoCodec::RenderUpdateCallBack(const void *ctx, const CRect &SrcRect, const CRect &DestRect)
++{
++  //6b585c
++  CHisiVideoCodec *codec = (CHisiVideoCodec*)ctx;
++  codec->SetVideoRect(SrcRect, DestRect);
++}
++
++
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.h kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.h
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.h	1970-01-01 01:00:00.000000000 +0100
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/HisiVideoCodec.h	2016-03-26 17:38:18.457504353 +0100
+@@ -0,0 +1,57 @@
++
++#pragma once
++
++#include "DVDStreamInfo.h"
++#include "threads/Thread.h"
++#include "threads/CriticalSection.h"
++#include "threads/Condition.h"
++#include "guilib/Geometry.h"
++#include "hi_common.h"
++#include "hi_unf_video.h"
++
++
++class DllLibHiSample;
++class DllLibHiComm;
++class DllLibHiMpi;
++struct Struct_188;
++
++
++class CHisiVideoCodec : public CThread
++{
++public:
++  CHisiVideoCodec();
++  virtual ~CHisiVideoCodec();
++
++  bool OpenDecoder(CDVDStreamInfo &hints);
++  void CloseDecoder();
++
++  int Decode(uint8_t* pData, int iSize, double dts, double pts);
++  void Reset();
++
++protected:
++  virtual void  Process();
++
++protected:
++  //bool m_bStop; //4 //CThread
++  DllLibHiSample* m_dllHiSample; //176
++  DllLibHiComm* m_dllHiComm; //180
++  DllLibHiMpi* m_dllbHiMpi; //184
++  Struct_188* m_pData_188; //188
++  float m_fData_200; //200
++  char m_bData_236; //236
++  char m_bData_237; //237
++  int m_Data_240; //240
++  CCriticalSection m_Section_244; //244
++  XbmcThreads::ConditionVariable m_Cond_256; //256
++  CCriticalSection m_Section_268; //268
++  HI_UNF_VCODEC_TYPE_E m_VdecType; //324
++  HI_HANDLE m_hAvPlay; //328
++  HI_HANDLE m_hWindow; //332
++  char m_bData_344; //344
++
++  static HI_HANDLE g_m_hAvplay;
++
++  void SetVideoRect(const CRect &SrcRect, const CRect &DestRect);
++  static void RenderUpdateCallBack(const void *ctx, const CRect &SrcRect, const CRect &DestRect);
++};
++
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/Makefile.in kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/Makefile.in
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDCodecs/Video/Makefile.in	2015-10-23 23:53:21.000000000 +0200
++++ kodi.work/xbmc/cores/dvdplayer/DVDCodecs/Video/Makefile.in	2016-03-24 14:17:52.518576714 +0100
+@@ -5,6 +5,10 @@
+ SRCS += DVDVideoCodecLibMpeg2.cpp
+ SRCS += DVDVideoPPFFmpeg.cpp
+ 
++SRCS += DllLibHiSample.cpp
++SRCS += HisiVideoCodec.cpp
++SRCS += DVDVideoCodecHisi.cpp
++
+ ifeq (@USE_VDPAU@,1)
+ SRCS += VDPAU.cpp
+ endif
+diff -Naur kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDStreamInfo.h kodi.work/xbmc/cores/dvdplayer/DVDStreamInfo.h
+--- kodi-15.2-02e7013/xbmc/cores/dvdplayer/DVDStreamInfo.h	2015-10-23 23:53:21.000000000 +0200
++++ kodi.work/xbmc/cores/dvdplayer/DVDStreamInfo.h	2016-03-26 15:26:07.089356269 +0100
+@@ -56,8 +56,8 @@
+ 
+ 
+   // VIDEO
+-  int fpsscale; // scale of 1001 and a rate of 60000 will result in 59.94 fps
+-  int fpsrate;
++  int fpsscale; //12 // scale of 1001 and a rate of 60000 will result in 59.94 fps
++  int fpsrate; //16
+   int rfpsscale;
+   int rfpsrate;
+   int height; // height of the stream reported by the demuxer
+@@ -68,8 +68,8 @@
+   int level; // encoder level of the stream reported by the decoder. used to qualify hw decoders.
+   int profile; // encoder profile of the stream reported by the decoder. used to qualify hw decoders.
+   bool ptsinvalid;  // pts cannot be trusted (avi's).
+-  bool forced_aspect; // aspect is forced from container
+-  int orientation; // orientation of the video in degress counter clockwise
++  bool forced_aspect; //45 // aspect is forced from container
++  int orientation; //48 // orientation of the video in degress counter clockwise
+   int bitsperpixel;
+   int pid;
+   std::string stereo_mode; // stereoscopic 3d mode
