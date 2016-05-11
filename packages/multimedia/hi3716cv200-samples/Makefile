@@ -15,7 +15,7 @@ objects += gpu
 endif 
 
 ifeq ($(CFG_HI_PLAYER_SUPPORT),y)
-#objects += localplay
+objects += localplay
 endif
 
 objects += common
