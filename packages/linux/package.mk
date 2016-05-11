@@ -44,6 +44,11 @@ case "$LINUX" in
 #    PKG_URL="https://github.com/Spitzbube/hisilicon-kernel/archive/$PKG_NAME-$PKG_VERSION.tar.gz"
     PKG_URL="https://github.com/Spitzbube/hisilicon-kernel/releases/download/$PKG_NAME-$PKG_VERSION/$PKG_NAME-$PKG_VERSION.tar.xz"
     ;;
+  hi3716cv200)
+    PKG_VERSION="x5hd2-bb316e8"
+#    PKG_URL="https://github.com/Spitzbube/linux-x5hd2/archive/bb316e8.tar.gz"
+    PKG_URL="https://github.com/Spitzbube/linux-x5hd2/releases/download/bb316e8/$PKG_NAME-$PKG_VERSION.tar.gz"
+    ;;
   *)
     PKG_VERSION="4.1.12"
     PKG_URL="http://www.kernel.org/pub/linux/kernel/v4.x/$PKG_NAME-$PKG_VERSION.tar.xz"

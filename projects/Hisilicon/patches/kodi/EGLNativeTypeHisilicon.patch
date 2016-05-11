@@ -1,7 +1,7 @@
 diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp
 --- kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	1970-01-01 01:00:00.000000000 +0100
-+++ kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	2016-03-04 22:03:09.847767810 +0100
-@@ -0,0 +1,766 @@
++++ kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp	2016-04-24 19:34:41.485303905 +0200
+@@ -0,0 +1,772 @@
 +
 +#include "EGLNativeTypeHisilicon.h"
 +#include <EGL/egl.h>
@@ -127,8 +127,11 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +	  ||(HI_UNF_ENC_FMT_720P_60 == enFormat)
 +	  ||(HI_UNF_ENC_FMT_480P_60 == enFormat)
 +	  ||(HI_UNF_ENC_FMT_NTSC == enFormat)
++#if 0
 +	  ||(HI_UNF_ENC_FMT_3840X2160_30 == enFormat)
-+	  ||(HI_UNF_ENC_FMT_3840X2160_24 == enFormat))
++	  ||(HI_UNF_ENC_FMT_3840X2160_24 == enFormat)
++#endif
++	  )
 +  {
 +	  Ret = HI_UNF_DISP_SetFormat(HI_UNF_DISPLAY0, HI_UNF_ENC_FMT_NTSC);
 +	  if (HI_SUCCESS != Ret)
@@ -145,7 +148,10 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +	  ||(HI_UNF_ENC_FMT_720P_50 == enFormat)
 +	  ||(HI_UNF_ENC_FMT_576P_50 == enFormat)
 +	  ||(HI_UNF_ENC_FMT_PAL == enFormat)
-+	  ||(HI_UNF_ENC_FMT_3840X2160_25 == enFormat))
++#if 0
++	  ||(HI_UNF_ENC_FMT_3840X2160_25 == enFormat)
++#endif
++	  )
 +  {
 +	  Ret = HI_UNF_DISP_SetFormat(HI_UNF_DISPLAY0, HI_UNF_ENC_FMT_PAL);
 +	  if (HI_SUCCESS != Ret)
@@ -770,7 +776,7 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.cpp kodi.
 +
 diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.h
 --- kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	1970-01-01 01:00:00.000000000 +0100
-+++ kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	2016-03-04 10:21:10.356564397 +0100
++++ kodi.work/xbmc/windowing/egl/EGLNativeTypeHisilicon.h	2016-04-24 18:48:51.328972522 +0200
 @@ -0,0 +1,39 @@
 +#pragma once
 +
@@ -813,7 +819,7 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLNativeTypeHisilicon.h kodi.wo
 +};
 diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp kodi.work/xbmc/windowing/egl/EGLWrapper.cpp
 --- kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp	2015-10-23 23:53:23.000000000 +0200
-+++ kodi.work/xbmc/windowing/egl/EGLWrapper.cpp	2016-03-01 11:43:14.107605563 +0100
++++ kodi.work/xbmc/windowing/egl/EGLWrapper.cpp	2016-04-24 18:48:51.328972522 +0200
 @@ -36,6 +36,9 @@
  #if defined(HAS_IMXVPU)
    #include "EGLNativeTypeIMX.h"
@@ -836,7 +842,7 @@ diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/EGLWrapper.cpp kodi.work/xbmc/wi
    {
 diff -Naur kodi-15.2-02e7013/xbmc/windowing/egl/Makefile.in kodi.work/xbmc/windowing/egl/Makefile.in
 --- kodi-15.2-02e7013/xbmc/windowing/egl/Makefile.in	2015-10-23 23:53:23.000000000 +0200
-+++ kodi.work/xbmc/windowing/egl/Makefile.in	2016-03-01 11:43:14.103605563 +0100
++++ kodi.work/xbmc/windowing/egl/Makefile.in	2016-04-24 18:48:51.328972522 +0200
 @@ -13,6 +13,7 @@
  ifeq (@USE_IMXVPU@,1)
  SRCS+= EGLNativeTypeIMX.cpp
