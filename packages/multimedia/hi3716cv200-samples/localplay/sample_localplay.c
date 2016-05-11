@@ -27,6 +27,8 @@
 #include "hi_adp_hdmi.h"
 #endif
 #include "hi_svr_player.h"
+#include "hi_svr_format.h"
+#include "hi_svr_metadata.h"
 #if 0
 #include "hi_svr_format.h"
 #include "hi_svr_metadata.h"
